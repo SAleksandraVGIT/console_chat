@@ -1,0 +1,58 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "CMake: configure",
+      "type": "process",
+      "command": "cmake",
+      "args": [
+        "-S", ".",
+        "-B", "build"
+      ],
+      "windows": {
+        "args": [
+          "-S", ".",
+          "-B", "build",
+          "-G", "MinGW Makefiles"
+        ]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "CMake: build",
+      "type": "process",
+      "command": "cmake",
+      "args": [
+        "--build", "build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "dependsOn": ["CMake: configure"],
+      "dependsOrder": "sequence",
+      "problemMatcher": ["$gcc"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "Run program",
+      "type": "process",
+      "command": "${workspaceFolder}/build/console_chat",
+      "windows": {
+        "command": "${workspaceFolder}\\build\\console_chat.exe"
+      },
+      "dependsOn": ["CMake: build"],
+      "dependsOrder": "sequence"
+    }
+  ]
+}
