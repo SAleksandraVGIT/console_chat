@@ -2,11 +2,12 @@
 
 #include <iostream>
 #include <utility>
+#include <algorithm>
 
 
 namespace console_chat {
 
-const size_t LAST_MESSAGE_COUNT = 15;
+constexpr size_t LAST_MESSAGE_COUNT = 15;
 
 std::string ReadLine() {
     std::string input;
@@ -25,16 +26,19 @@ void PrintLastMessages(
     const std::string& currentUserName,
     const size_t lastCount = LAST_MESSAGE_COUNT)
 {
-    const size_t start = (messages.size() > lastCount) ? (messages.size() - lastCount) : 0;
-    for (size_t i = start; i < messages.size(); ++i) {
-        const auto& msg = messages[i];
+    const auto startIt =
+        messages.size() > lastCount
+            ? messages.end() - static_cast<std::ptrdiff_t>(lastCount)
+            : messages.begin();
 
-        if (!currentUserName.empty() && msg.Name == currentUserName) {
-            std::cout << "\tYou: " << msg.Text << "\n";
-        } else {
-            std::cout << "[" << msg.Name << "] " << msg.Text << "\n";
-        }
-    }
+    std::for_each(startIt, messages.end(),
+        [&](const Message& msg) {
+            if (!currentUserName.empty() && msg.Name == currentUserName) {
+                std::cout << "\tYou: " << msg.Text << "\n";
+            } else {
+                std::cout << "[" << msg.Name << "] " << msg.Text << "\n";
+            }
+        });
 }
 
 int Console::Run() {
@@ -221,7 +225,7 @@ void Console::ChatSession(const std::string& chatName)
 void Console::OpenChatFlow()
 {
     const auto chats = m_service.GetMyChats();
-    if (chats.empty() || chats.size()-1 == 0) {
+    if (chats.size() <= 1) {
         std::cout << "You have no private chats.\n";
         return;
     }
@@ -233,13 +237,10 @@ void Console::OpenChatFlow()
         return;
     }
 
-    bool chatExists = false;
-    for (const auto& chat : chats) {
-        if (chatName == chat) {
-            chatExists = true;
-            break;
-        }
-    }
+    const bool chatExists = std::any_of(chats.begin(), chats.end(),
+        [&](const auto& chat) {
+            return chat == chatName;
+        });
 
     if (!chatExists) {
         std::cout << "Chat \"" << chatName << "\" does not exist.\n";
