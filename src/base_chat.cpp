@@ -3,7 +3,7 @@
 
 namespace console_chat {
 
-const size_t MAX_MESSAGES_PER_CHAT = 1000;
+constexpr size_t  MAX_MESSAGES_PER_CHAT = 1000;
 
 bool BaseChat::IsParticipant(const std::string&) const {
     return true;
