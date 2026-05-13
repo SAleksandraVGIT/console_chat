@@ -98,20 +98,21 @@ cmake --build build
 ### `Message` (`include/console_chat/base_chat.h`)
 
 Простая структура сообщения:
-- `Name` — отображаемое имя отправителя;
+- `Name` — имя отправителя;
 - `Text` — текст сообщения.
 
 ### `User` (`include/console_chat/user.h`)
 
 Модель пользователя:
-- хранит имя, логин и пароль;
-- даёт доступ к имени/логину;
+- хранит имя и пароль;
+- логин используется как ключ в `ChatService`;
 - проверяет пароль через `CheckPassword`.
 
 ### `BaseChat` (`include/console_chat/base_chat.h`, `src/base_chat.cpp`)
 
 Базовый класс чата:
-- хранит имя чата и список сообщений;
+- хранит список сообщений;
+- имя чата хранится в `ChatService`;
 - по умолчанию доступен всем (`IsParticipant(...) == true`);
 - по умолчанию не приватный (`IsPrivate() == false`);
 - добавляет сообщение через `AddMessage`.
@@ -122,8 +123,9 @@ cmake --build build
 ### `PrivateChat` (`include/console_chat/private_chat.h`, `src/private_chat.cpp`)
 
 Наследник `BaseChat` для диалога двух пользователей:
-- хранит логины двух участников (`User1`, `User2`);
-- пускает только этих участников (`IsParticipant`);
+- хранит участников в `std::array<std::string, 2>`;
+- проверяет участие через поиск (`std::find`);
+- предоставляет метод `HasUser`;
 - помечен как приватный (`IsPrivate() == true`).
 
 ### `ChatService` (`include/console_chat/chat_service.h`, `src/chat_service.cpp`)
@@ -131,7 +133,7 @@ cmake --build build
 Сервис бизнес-логики:
 - регистрирует пользователей (`Register`);
 - авторизует пользователя (`Authenticate`);
-- хранит текущую сессию (`m_currentUser`);
+- хранит текущего пользователя через `m_currentUserLogin`;
 - создаёт приватные чаты (`CreatePrivateChat`);
 - возвращает список чатов пользователя (`GetMyChats`);
 - отправляет/читает сообщения (`SendMessage`, `GetMessages`);

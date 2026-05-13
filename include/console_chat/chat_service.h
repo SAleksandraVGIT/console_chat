@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 
@@ -28,15 +29,20 @@ public:
     std::vector<std::string> GetAllUserLogins() const;
 
     inline void Logout() {
-        m_currentUser = nullptr;
+        m_currentUserLogin.clear();
     }
 
     inline bool IsAuthenticated() const {
-        return m_currentUser != nullptr;
+        return !m_currentUserLogin.empty();
     }
 
     inline std::string GetCurrentUserName() const {
-        return m_currentUser ? m_currentUser->GetName() : std::string{};
+        if (m_currentUserLogin.empty()) {
+            return std::string{};
+        }
+
+        const auto it = m_users.find(m_currentUserLogin);
+        return it != m_users.end() ? std::get<std::unique_ptr<console_chat::User>>(*it)->GetName() : std::string{};
     }
 
 private:
@@ -44,10 +50,10 @@ private:
     BaseChat* FindChat(const std::string& name) const;
 
 private:
-    std::vector<std::unique_ptr<User>> m_users;
-    std::vector<std::unique_ptr<BaseChat>> m_chats;
+    std::unordered_map<std::string, std::unique_ptr<User>> m_users;
+    std::unordered_map<std::string, std::unique_ptr<BaseChat>> m_chats;
 
-    User* m_currentUser = nullptr;
+    std::string m_currentUserLogin;
 };
 
 } // namespace console_chat
