@@ -4,7 +4,7 @@
 #include <utility>
 
 
-namespace console_chat {
+namespace console_chat::core {
 
 class User {
 public:
@@ -26,4 +26,4 @@ private:
     std::string m_password;
 };
 
-} // namespace console_chat
+} // namespace console_chat::core

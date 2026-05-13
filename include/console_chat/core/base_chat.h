@@ -5,7 +5,7 @@
 #include <utility>
 
 
-namespace console_chat {
+namespace console_chat::core {
 
 struct Message {
     std::string Name;
@@ -29,4 +29,4 @@ protected:
     std::vector<Message> m_messages;
 };
 
-} // namespace console_chat
+} // namespace console_chat::core

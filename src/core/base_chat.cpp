@@ -1,7 +1,7 @@
-#include "console_chat/base_chat.h"
+#include "console_chat/core/base_chat.h"
 
 
-namespace console_chat {
+namespace console_chat::core {
 
 constexpr size_t  MAX_MESSAGES_PER_CHAT = 1000;
 
@@ -22,4 +22,4 @@ bool BaseChat::AddMessage(Message&& msg) {
     return true;
 }
 
-} // namespace console_chat
+} // namespace console_chat::core

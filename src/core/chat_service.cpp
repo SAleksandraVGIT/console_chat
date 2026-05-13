@@ -1,10 +1,10 @@
-#include "console_chat/chat_service.h"
-#include "console_chat/private_chat.h"
+#include "console_chat/core/chat_service.h"
+#include "console_chat/core/private_chat.h"
 
 #include <algorithm>
 
 
-namespace console_chat {
+namespace console_chat::core {
 
 constexpr size_t MAX_CHATS_ON_SERVER = 991;
 constexpr size_t MAX_PRIVATE_CHATS_PER_USER = 45;
@@ -31,25 +31,29 @@ bool ChatService::Authenticate(const std::string& login, const std::string& pass
         return false;
     }
 
-    if (!std::get<std::unique_ptr<console_chat::User>>(*it)->CheckPassword(password)) {
+    if (!std::get<std::unique_ptr<User>>(*it)->CheckPassword(password)) {
         return false;
     }
 
-    m_currentUserLogin = login;
     return true;
 }
 
-std::vector<std::string> ChatService::GetMyChats() const {
+std::string ChatService::GetUserNameByLogin(const std::string& login) const {
+    const auto it = m_users.find(login);
+    return it != m_users.end() ? std::get<std::unique_ptr<User>>(*it)->GetName() : std::string{};
+}
+
+std::vector<std::string> ChatService::GetMyChats(const std::string& currentLogin) const {
     std::vector<std::string> result;
 
-    if (m_currentUserLogin.empty()) {
+    if (currentLogin.empty() || !m_users.contains(currentLogin)) {
         return result;
     }
 
     result.reserve(m_chats.size());
 
     for (const auto& [chatName, chat] : m_chats){
-        if (chat->IsParticipant(m_currentUserLogin)) {
+        if (chat->IsParticipant(currentLogin)) {
             result.emplace_back(chatName);
         }
     }
@@ -71,10 +75,11 @@ std::vector<std::string> ChatService::GetAllUserLogins() const {
 }
 
 bool ChatService::CreatePrivateChat(
+    const std::string& currentLogin,
     std::string&& recipientLogin,
     std::string&& chatName)
 {
-    if (m_currentUserLogin.empty()) {
+    if (currentLogin.empty() || !m_users.contains(currentLogin)) {
         return false;
     }
 
@@ -82,7 +87,7 @@ bool ChatService::CreatePrivateChat(
         return false;
     }
 
-    if (recipientLogin == m_currentUserLogin) {
+    if (recipientLogin == currentLogin) {
         return false;
     }
 
@@ -103,7 +108,7 @@ bool ChatService::CreatePrivateChat(
             continue;
         }
 
-        const bool involvesMe = privateChat->HasUser(m_currentUserLogin);
+        const bool involvesMe = privateChat->HasUser(currentLogin);
         const bool involvesRecipient = privateChat->HasUser(recipientLogin);
 
         if (involvesMe && involvesRecipient) {
@@ -127,16 +132,16 @@ bool ChatService::CreatePrivateChat(
 
     const auto [_, inserted] = m_chats.try_emplace(
         std::move(chatName),
-        std::make_unique<PrivateChat>(m_currentUserLogin, recipientLogin)
+        std::make_unique<PrivateChat>(currentLogin, recipientLogin)
     );
 
     return inserted;
 }
 
-std::vector<Message> ChatService::GetMessages(const std::string& chatName) const {
+std::vector<Message> ChatService::GetMessages(const std::string& currentLogin, const std::string& chatName) const {
     std::vector<Message> result;
 
-    if (m_currentUserLogin.empty()) {
+    if (currentLogin.empty() || !m_users.contains(currentLogin)) {
         return result;
     }
 
@@ -145,15 +150,15 @@ std::vector<Message> ChatService::GetMessages(const std::string& chatName) const
         return result;
     }
 
-    if (!chat->IsParticipant(m_currentUserLogin)) {
+    if (!chat->IsParticipant(currentLogin)) {
         return result;
     }
 
     return chat->GetMessages();
 }
 
-bool ChatService::SendMessage(const std::string& chatName, std::string&& text) {
-    if (m_currentUserLogin.empty()) {
+bool ChatService::SendMessage(const std::string& currentLogin, const std::string& chatName, std::string&& text) {
+    if (currentLogin.empty() || !m_users.contains(currentLogin)) {
         return false;
     }
 
@@ -166,31 +171,31 @@ bool ChatService::SendMessage(const std::string& chatName, std::string&& text) {
         return false;
     }
 
-    auto* chat = std::get<std::unique_ptr<console_chat::BaseChat>>(*it).get();
+    auto* chat = std::get<std::unique_ptr<BaseChat>>(*it).get();
 
-    if (!chat->IsParticipant(m_currentUserLogin)) {
+    if (!chat->IsParticipant(currentLogin)) {
         return false;
     }
 
-    const auto userIt = m_users.find(m_currentUserLogin);
+    const auto userIt = m_users.find(currentLogin);
     if (userIt == m_users.end()) {
         return false;
     }
 
     return chat->AddMessage(Message{
-            std::get<std::unique_ptr<console_chat::User>>(*userIt)->GetName(),
+            std::get<std::unique_ptr<User>>(*userIt)->GetName(),
             std::move(text)
         });
 }
 
 User* ChatService::FindUser(const std::string& login) const {
     const auto it = m_users.find(login);
-    return it != m_users.end() ? std::get<std::unique_ptr<console_chat::User>>(*it).get() : nullptr;
+    return it != m_users.end() ? std::get<std::unique_ptr<User>>(*it).get() : nullptr;
 }
 
 BaseChat* ChatService::FindChat(const std::string& name) const {
     const auto it = m_chats.find(name);
-    return it != m_chats.end() ? std::get<std::unique_ptr<console_chat::BaseChat>>(*it).get() : nullptr;
+    return it != m_chats.end() ? std::get<std::unique_ptr<BaseChat>>(*it).get() : nullptr;
 }
 
-} // namespace console_chat
+} // namespace console_chat::core

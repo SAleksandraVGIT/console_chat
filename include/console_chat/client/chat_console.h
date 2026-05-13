@@ -1,15 +1,15 @@
 #pragma once
 
-#include "chat_service.h"
+#include "chat_client.h"
 
 #include <string>
 
 
-namespace console_chat {
+namespace console_chat::client {
 
-class Console {
+class ChatConsole {
 public:
-    explicit Console(ChatService& service)
+    explicit ChatConsole(ChatClient& service)
         : m_service(service) {}
 
     int Run();
@@ -49,7 +49,7 @@ private:
     };
 
 private:
-    ChatService& m_service;
+    ChatClient& m_service;
 };
 
-} // namespace console_chat
+} // namespace console_chat::client
