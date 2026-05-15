@@ -1,21 +1,53 @@
 # Минимальная версия CMake
 cmake_minimum_required(VERSION 3.16)
 
-# Название проекта
+# Имя проекта и используемый язык
 project(console_chat LANGUAGES CXX)
 
-# Подключаем CMake модуль для C++20
+# Настройки стандарта C++: используем строго C++20 без расширений компилятора
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Подключение всех вложеных файлов с расширением cpp
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS src/*.cpp)
-
-# Создаём исполняемый файл
-add_executable(console_chat ${SOURCES})
-
-# Указываем путь к заголовочным файлам для console_chat
-target_include_directories(console_chat PRIVATE
-  ${CMAKE_SOURCE_DIR}/include
+# Общие исходники.
+# Эти файлы собираются в статическую библиотеку, которую потом линкуют исполняемые файлы.
+set(CHAT_CORE_SOURCES
+  src/core/base_chat.cpp
+  src/core/private_chat.cpp
+  src/core/chat_service.cpp
+  src/client/chat_console.cpp
+  src/network/tcp_socket.cpp
+  src/client/chat_client.cpp
 )
+
+# Библиотека с общей логикой чата
+add_library(chat_core STATIC ${CHAT_CORE_SOURCES})
+# Публичный include-путь, чтобы зависимые цели видели заголовки из include/
+target_include_directories(chat_core PUBLIC ${CMAKE_SOURCE_DIR}/include)
+if (WIN32)
+  target_link_libraries(chat_core PUBLIC ws2_32)
+endif()
+
+
+# Клиентское приложение
+add_executable(console_chat src/client/main.cpp)
+# Заголовки проекта для клиента
+target_link_libraries(console_chat PRIVATE chat_core)
+
+
+# Серверное приложение.
+add_executable(chat_server
+  src/server/main.cpp
+  src/server/protocol.cpp
+  src/server/request_router.cpp
+  src/server/session.cpp
+  src/core/base_chat.cpp
+  src/core/private_chat.cpp
+  src/core/chat_service.cpp
+  src/network/tcp_socket.cpp
+)
+# Заголовки проекта для сервера
+target_include_directories(chat_server PRIVATE ${CMAKE_SOURCE_DIR}/include)
+if (WIN32)
+  target_link_libraries(chat_server PRIVATE ws2_32)
+endif()

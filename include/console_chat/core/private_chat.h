@@ -7,7 +7,7 @@
 #include <array>
 #include <algorithm>
 
-namespace console_chat {
+namespace console_chat::core {
 
 class PrivateChat : public BaseChat {
 public:
@@ -26,4 +26,4 @@ private:
     std::array<std::string, 2> m_users;
 };
 
-} // namespace console_chat
+} // namespace console_chat::core

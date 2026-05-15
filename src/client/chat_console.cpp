@@ -1,11 +1,11 @@
-#include "console_chat/console.h"
+#include "console_chat/client/chat_console.h"
 
 #include <iostream>
 #include <utility>
 #include <algorithm>
 
 
-namespace console_chat {
+namespace console_chat::client {
 
 constexpr size_t LAST_MESSAGE_COUNT = 15;
 
@@ -22,7 +22,7 @@ int ReadInt() {
 }
 
 void PrintLastMessages(
-    const std::vector<Message>& messages,
+    const std::vector<core::Message>& messages,
     const std::string& currentUserName,
     const size_t lastCount = LAST_MESSAGE_COUNT)
 {
@@ -32,7 +32,7 @@ void PrintLastMessages(
             : messages.begin();
 
     std::for_each(startIt, messages.end(),
-        [&](const Message& msg) {
+        [&](const core::Message& msg) {
             if (!currentUserName.empty() && msg.Name == currentUserName) {
                 std::cout << "\tYou: " << msg.Text << "\n";
             } else {
@@ -41,7 +41,7 @@ void PrintLastMessages(
         });
 }
 
-int Console::Run() {
+int ChatConsole::Run() {
     bool running = true;
 
     while (running) {
@@ -75,7 +75,7 @@ int Console::Run() {
     return 0;
 }
 
-void Console::UserMenu() {
+void ChatConsole::UserMenu() {
     bool inSession = true;
 
     while (inSession && m_service.IsAuthenticated()) {
@@ -117,7 +117,7 @@ void Console::UserMenu() {
     }
 }
 
-void Console::RegistrationFlow() {
+void ChatConsole::RegistrationFlow() {
     std::cout << "\n==== REGISTRATION ====\n"
               << "-Press \"/0\" to cancel-\n";
 
@@ -146,7 +146,7 @@ void Console::RegistrationFlow() {
                     : "Registration failed. Login is already exist.\n");
 }
 
-void Console::LoginFlow() {
+void ChatConsole::LoginFlow() {
     std::cout << "\n==== LOGIN ====\n"
               << "-Press \"/0\" to cancel-\n";
 
@@ -169,7 +169,7 @@ void Console::LoginFlow() {
                     : "Invalid login or password.\n");
 }
 
-void Console::CreatePrivateChatFlow()
+void ChatConsole::CreatePrivateChatFlow()
 {
     std::cout << "\nEnter recipient login (\"/0\" to cancel): ";
     std::string login = ReadLine();
@@ -192,7 +192,7 @@ void Console::CreatePrivateChatFlow()
                 : "Failed to create private chat.\n");
 }
 
-void Console::ChatSession(const std::string& chatName)
+void ChatConsole::ChatSession(const std::string& chatName)
 {
     std::cout << "\n==== CHAT: " << chatName << " ====\n";
     PrintLastMessages(m_service.GetMessages(chatName), m_service.GetCurrentUserName());
@@ -222,7 +222,7 @@ void Console::ChatSession(const std::string& chatName)
     }
 }
 
-void Console::OpenChatFlow()
+void ChatConsole::OpenChatFlow()
 {
     const auto chats = m_service.GetMyChats();
     if (chats.size() <= 1) {
@@ -250,11 +250,11 @@ void Console::OpenChatFlow()
     ChatSession(chatName);
 }
 
-void Console::OpenGeneralChatFlow() {
-    ChatSession(GENERAL_CHAT_NAME);
+void ChatConsole::OpenGeneralChatFlow() {
+    ChatSession("GENERAL");
 }
 
-void Console::ShowMyChatsFlow() const {
+void ChatConsole::ShowMyChatsFlow() const {
     const auto chats = m_service.GetMyChats();
 
     if (chats.empty()) {
@@ -269,7 +269,7 @@ void Console::ShowMyChatsFlow() const {
     }
 }
 
-void Console::ShowAllUsersFlow() const {
+void ChatConsole::ShowAllUsersFlow() const {
     const auto userLogins = m_service.GetAllUserLogins();
 
     if (userLogins.empty()) {
@@ -284,14 +284,14 @@ void Console::ShowAllUsersFlow() const {
     }
 }
 
-void Console::ShowMainMenu() const {
+void ChatConsole::ShowMainMenu() const {
     std::cout << "\n==== MAIN MENU ====\n"
               << "0 - Exit\n"
               << "1 - Registration\n"
               << "2 - Log in\n";
 }
 
-void Console::ShowUserMenu() const {
+void ChatConsole::ShowUserMenu() const {
     std::cout << "\n==== USER MENU ====\n"
               << "0 - Log out\n"
               << "1 - Get list of my chats\n"
@@ -301,4 +301,4 @@ void Console::ShowUserMenu() const {
               << "5 - Get list of user\n";
 }
 
-} // namespace console_chat
+} // namespace console_chat::client
