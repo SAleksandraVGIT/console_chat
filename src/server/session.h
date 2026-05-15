@@ -4,9 +4,15 @@
 #include "console_chat/network/tcp_socket.h"
 
 #include <mutex>
+#include <string>
 
 namespace console_chat::server {
 
-void HandleClientSession(network::TcpSocket client, core::ChatService& service, std::mutex& serviceMutex);
+void HandleClientSession(
+    network::TcpSocket client,
+    core::ChatService& service,
+    std::mutex& serviceMutex,
+    const std::string& usersFilePath,
+    const std::string& chatsFilePath);
 
 } // namespace console_chat::server

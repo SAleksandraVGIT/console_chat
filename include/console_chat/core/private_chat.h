@@ -22,6 +22,10 @@ public:
         return std::find(m_users.begin(), m_users.end(), login) != m_users.end();
     }
 
+    inline const std::array<std::string, 2>& GetUsers() const {
+        return m_users;
+    }
+
 private:
     std::array<std::string, 2> m_users;
 };

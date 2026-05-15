@@ -29,6 +29,9 @@ public:
 
     std::vector<std::string> GetAllUserLogins() const;
 
+    bool LoadState(const std::string& usersFilePath, const std::string& chatsFilePath);
+    bool SaveState(const std::string& usersFilePath, const std::string& chatsFilePath) const;
+
 private:
     User* FindUser(const std::string& login) const;
     BaseChat* FindChat(const std::string& name) const;

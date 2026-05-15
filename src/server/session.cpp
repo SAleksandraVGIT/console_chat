@@ -8,7 +8,13 @@
 
 namespace console_chat::server {
 
-void HandleClientSession(network::TcpSocket client, core::ChatService& service, std::mutex& serviceMutex) {
+void HandleClientSession(
+    network::TcpSocket client,
+    core::ChatService& service,
+    std::mutex& serviceMutex,
+    const std::string& usersFilePath,
+    const std::string& chatsFilePath)
+{
     std::string currentLogin;
     std::string line;
 
@@ -18,7 +24,7 @@ void HandleClientSession(network::TcpSocket client, core::ChatService& service, 
 
         {
             std::lock_guard<std::mutex> lock(serviceMutex);
-            resp = HandleRequest(req, service, currentLogin);
+            resp = HandleRequest(req, service, currentLogin, usersFilePath, chatsFilePath);
         }
 
         if (!client.SendLine(Join(resp, '\t'))) {

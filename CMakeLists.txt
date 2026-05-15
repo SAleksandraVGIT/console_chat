@@ -14,6 +14,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CHAT_CORE_SOURCES
   src/core/base_chat.cpp
   src/core/private_chat.cpp
+  src/core/password_protector.cpp
   src/core/chat_service.cpp
   src/client/chat_console.cpp
   src/network/tcp_socket.cpp
@@ -41,13 +42,10 @@ add_executable(chat_server
   src/server/protocol.cpp
   src/server/request_router.cpp
   src/server/session.cpp
-  src/core/base_chat.cpp
-  src/core/private_chat.cpp
-  src/core/chat_service.cpp
-  src/network/tcp_socket.cpp
 )
 # Заголовки проекта для сервера
 target_include_directories(chat_server PRIVATE ${CMAKE_SOURCE_DIR}/include)
+target_link_libraries(chat_server PRIVATE chat_core)
 if (WIN32)
   target_link_libraries(chat_server PRIVATE ws2_32)
 endif()

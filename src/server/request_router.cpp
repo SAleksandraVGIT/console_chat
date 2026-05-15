@@ -5,7 +5,9 @@ namespace console_chat::server {
 std::vector<std::string> HandleRequest(
     const std::vector<std::string>& req,
     core::ChatService& service,
-    std::string& currentLogin)
+    std::string& currentLogin,
+    const std::string& usersFilePath,
+    const std::string& chatsFilePath)
 {
     if (req.empty()) {
         return {"ERR", "empty request"};
@@ -14,9 +16,11 @@ std::vector<std::string> HandleRequest(
     const std::string& cmd = req[0];
 
     if (cmd == "REGISTER" && req.size() == 4) {
-        return service.Register(std::string(req[1]), std::string(req[2]), std::string(req[3]))
-            ? std::vector<std::string>{"OK"}
-            : std::vector<std::string>{"ERR", "register failed"};
+        const bool ok = service.Register(std::string(req[1]), std::string(req[2]), std::string(req[3]));
+        if (ok && !service.SaveState(usersFilePath, chatsFilePath)) {
+            return {"ERR", "state save failed"};
+        }
+        return ok ? std::vector<std::string>{"OK"} : std::vector<std::string>{"ERR", "register failed"};
     }
 
     if (cmd == "LOGIN" && req.size() == 3) {
@@ -48,9 +52,11 @@ std::vector<std::string> HandleRequest(
     }
 
     if (cmd == "CREATE_PRIVATE" && req.size() == 3) {
-        return service.CreatePrivateChat(currentLogin, std::string(req[1]), std::string(req[2]))
-            ? std::vector<std::string>{"OK"}
-            : std::vector<std::string>{"ERR", "create private failed"};
+        const bool ok = service.CreatePrivateChat(currentLogin, std::string(req[1]), std::string(req[2]));
+        if (ok && !service.SaveState(usersFilePath, chatsFilePath)) {
+            return {"ERR", "state save failed"};
+        }
+        return ok ? std::vector<std::string>{"OK"} : std::vector<std::string>{"ERR", "create private failed"};
     }
 
     if (cmd == "GET_MESSAGES" && req.size() == 2) {
@@ -64,9 +70,11 @@ std::vector<std::string> HandleRequest(
     }
 
     if (cmd == "SEND_MESSAGE" && req.size() == 3) {
-        return service.SendMessage(currentLogin, req[1], std::string(req[2]))
-            ? std::vector<std::string>{"OK"}
-            : std::vector<std::string>{"ERR", "send failed"};
+        const bool ok = service.SendMessage(currentLogin, req[1], std::string(req[2]));
+        if (ok && !service.SaveState(usersFilePath, chatsFilePath)) {
+            return {"ERR", "state save failed"};
+        }
+        return ok ? std::vector<std::string>{"OK"} : std::vector<std::string>{"ERR", "send failed"};
     }
 
     if (cmd == "GET_ALL_USERS" && req.size() == 1) {
