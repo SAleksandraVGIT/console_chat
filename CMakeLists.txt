@@ -49,3 +49,13 @@ target_link_libraries(chat_server PRIVATE chat_core)
 if (WIN32)
   target_link_libraries(chat_server PRIVATE ws2_32)
 endif()
+
+
+# Тесты
+# Подключает стандартный CMake-модуль CTest и создает опцию BUILD_TESTING.
+include(CTest)
+
+# Подключает тесты только если тестирование включено.
+if (BUILD_TESTING)
+  add_subdirectory(tests)
+endif()

@@ -8,11 +8,11 @@
 #include <iomanip>
 
 
+namespace fs = std::filesystem;
+
 namespace console_chat::core {
 
 constexpr size_t MAX_CHATS_ON_SERVER = 991;
-constexpr size_t MAX_PRIVATE_CHATS_PER_USER = 45;
-constexpr size_t MAX_MESSAGE_LENGTH = 256;
 
 namespace {
 
@@ -22,10 +22,10 @@ bool SetOwnerOnlyPermissions(const std::string& filePath) {
     return true;
 #else
     std::error_code ec;
-    std::filesystem::permissions(
+    fs::permissions(
         filePath,
-        std::filesystem::perms::owner_read | std::filesystem::perms::owner_write,
-        std::filesystem::perm_options::replace,
+        fs::perms::owner_read | fs::perms::owner_write,
+        fs::perm_options::replace,
         ec);
     return !ec;
 #endif

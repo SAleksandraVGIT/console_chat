@@ -6,6 +6,9 @@
 
 namespace console_chat::network {
 
+using NativeSocket = int;
+inline constexpr NativeSocket INVALID_NATIVE_SOCKET = -1;
+
 class TcpSocket {
 public:
     TcpSocket() = default;

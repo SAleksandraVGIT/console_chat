@@ -48,9 +48,7 @@ void CloseNativeSocket(const NativeSocket fd) {
 
 #else
 
-using NativeSocket = int;
 using SocketLen = socklen_t;
-constexpr NativeSocket INVALID_NATIVE_SOCKET = -1;
 
 NativeSocket ToNative(const std::intptr_t fd) {
     return static_cast<NativeSocket>(fd);

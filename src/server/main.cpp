@@ -12,6 +12,8 @@
 
 namespace {
 
+namespace fs = std::filesystem;
+
 constexpr int DEFAULT_PORT = 7777;
 constexpr int BACKLOG = 10;
 constexpr int MIN_PORT = 1024;
@@ -60,20 +62,20 @@ int main(int argc, char* argv[]) {
     }
 
     console_chat::core::ChatService service;
-    std::filesystem::create_directories(std::filesystem::path(DEFAULT_STATE_DIR));
-    const auto usersDir = std::filesystem::path(usersFilePath).parent_path();
-    const auto chatsDir = std::filesystem::path(chatsFilePath).parent_path();
+    fs::create_directories(fs::path(DEFAULT_STATE_DIR));
+    const auto usersDir = fs::path(usersFilePath).parent_path();
+    const auto chatsDir = fs::path(chatsFilePath).parent_path();
     if (!usersDir.empty()) {
-        std::filesystem::create_directories(usersDir);
+        fs::create_directories(usersDir);
     }
     if (!chatsDir.empty()) {
-        std::filesystem::create_directories(chatsDir);
+        fs::create_directories(chatsDir);
     }
 
     if (resetState) {
         std::error_code ec;
-        std::filesystem::remove(usersFilePath, ec);
-        std::filesystem::remove(chatsFilePath, ec);
+        fs::remove(usersFilePath, ec);
+        fs::remove(chatsFilePath, ec);
         std::cout << "State reset requested. Starting with empty state.\n";
     } else if (!service.LoadState(usersFilePath, chatsFilePath)) {
         std::cout << "No valid saved state found. Starting with empty state.\n";

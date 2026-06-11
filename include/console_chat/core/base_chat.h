@@ -7,6 +7,8 @@
 
 namespace console_chat::core {
 
+inline constexpr  size_t MAX_MESSAGES_PER_CHAT = 1000;
+
 struct Message {
     std::string Name;
     std::string Text;

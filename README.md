@@ -36,8 +36,9 @@
 ### Linux (Ubuntu, bash)
 
 ```bash
-# Сгенерировать файлы сборки в папку build
-cmake -S . -B build
+# Сгенерировать файлы сборки без тестов
+cmake -S . -B build -DBUILD_TESTING=OFF
+
 # Собрать проект (параллельно по ядрам CPU)
 cmake --build build -j
 ```
@@ -45,8 +46,9 @@ cmake --build build -j
 ### Windows (PowerShell)
 
 ```powershell
-# Сгенерировать файлы сборки в папку build
-cmake -S . -B build -G "MinGW Makefiles"
+# Сгенерировать файлы сборки без тестов
+cmake -S . -B build -G "MinGW Makefiles" -DBUILD_TESTING=OFF
+
 # Собрать проект
 cmake --build build
 ```
@@ -57,7 +59,7 @@ cmake --build build
 
 ```bash
 rm -rf build
-cmake -S . -B build
+cmake -S . -B build -DBUILD_TESTING=OFF
 cmake --build build -j
 ```
 
@@ -65,9 +67,43 @@ cmake --build build -j
 
 ```powershell
 Remove-Item -Recurse -Force build
-cmake -S . -B build -G "MinGW Makefiles"
+cmake -S . -B build -G "MinGW Makefiles" -DBUILD_TESTING=OFF
 cmake --build build
 ```
+
+## Запуск тестов
+
+Тесты написаны на GoogleTest и подключены через CTest.
+Если GoogleTest не установлен в системе, CMake скачает его автоматически при конфигурации проекта.
+Тестовая конфигурация находится в `tests/CMakeLists.txt` и подключается только при `BUILD_TESTING=ON`.
+
+### Linux (Ubuntu, bash)
+
+```bash
+# Сгенерировать файлы сборки с включенными тестами
+cmake -S . -B build -DBUILD_TESTING=ON
+
+# Собрать unit-, integration- и e2e-тесты
+cmake --build build --target console_chat_unit_tests console_chat_integration_tests console_chat_e2e_tests -j
+
+# Запустить все тесты
+ctest --test-dir build --output-on-failure
+```
+
+### Windows (PowerShell)
+
+```powershell
+# Сгенерировать файлы сборки с включенными тестами
+cmake -S . -B build -G "MinGW Makefiles" -DBUILD_TESTING=ON
+
+# Собрать unit-, integration- и e2e-тесты
+cmake --build build --target console_chat_unit_tests console_chat_integration_tests console_chat_e2e_tests
+
+# Запустить все тесты
+ctest --test-dir build --output-on-failure
+```
+
+Подробная информация о структуре тестов и списке проверок находится в `tests/README.md`.
 
 ## Запуск
 
@@ -287,3 +323,15 @@ cmake -S . -B build -G "MinGW Makefiles"; cmake --build build; .\build\console_c
 ### 1
 
 - Добавить защиту для персональных данных
+
+### 2
+
+- Добавть для User возможность настройки профиля (удалить аккаунт, заменить пароль, заменить имя, заменить логин)
+
+### 3
+
+- Заменить логин на почту (сделать проверку логина регуляркой)
+
+### 4
+
+- Добавть автоматическое обновление чата

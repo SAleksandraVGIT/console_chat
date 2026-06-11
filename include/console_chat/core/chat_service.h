@@ -13,6 +13,9 @@ namespace console_chat::core {
 
 static const char* GENERAL_CHAT_NAME = "GENERAL";
 
+inline constexpr size_t MAX_PRIVATE_CHATS_PER_USER = 45;
+inline constexpr size_t MAX_MESSAGE_LENGTH = 256;
+
 class ChatService {
 public:
     ChatService();
