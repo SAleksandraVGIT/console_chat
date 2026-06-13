@@ -21,11 +21,11 @@ node "Server process: chat_server" as ServerNode {
   [Client session thread] as Session
   [Request router] as Router
   [Shared ChatService] as Service
+  [IManager] as Storage
 }
 
 database "Persistent state" as State {
-  file "users.db" as UsersDb
-  file "chats.db" as ChatsDb
+  file "users.db / chats.db" as StateFiles
 }
 
 package "Domain objects" as Domain {
@@ -44,8 +44,8 @@ Network --> ListenSocket
 ListenSocket --> Session : accepted connection
 Session --> Router : parsed request
 Router --> Service : synchronized operation
-Service --> UsersDb : load / save
-Service --> ChatsDb : load / save
+Service --> Storage : load and point mutations
+Storage --> StateFiles : file backend
 Service --> UserEntity : owns users
 Service --> GeneralChat : owns GENERAL chat
 Service --> PrivateChat : owns private chats
@@ -92,12 +92,14 @@ ServerSocket -> Session : RecvLine()
 group mutex protects shared ChatService
   Session -> Router : HandleRequest()
   Router -> Service : domain method
-  Service --> Router : result
 
   opt registration, private chat creation or message send
-    Router -> Service : SaveState()
-    Service -> State : write users.db and chats.db
+    Service -> State : AddUser / AddChat / AddMessage
+    State --> Service : result
+    Service -> Service : update memory after success
   end
+
+  Service --> Router : result
 
   Router --> Session : OK or ERR response
 end

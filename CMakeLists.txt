@@ -16,6 +16,7 @@ set(CHAT_CORE_SOURCES
   src/core/private_chat.cpp
   src/core/password_protector.cpp
   src/core/chat_service.cpp
+  src/storage/file_manager.cpp
   src/client/chat_console.cpp
   src/network/tcp_socket.cpp
   src/client/chat_client.cpp

@@ -13,11 +13,11 @@ package "Server application (chat_server)" {
   }
 
   class Session <<module>> {
-    +HandleClientSession(client, service, serviceMutex, usersFilePath, chatsFilePath)
+    +HandleClientSession(client, service, serviceMutex)
   }
 
   class RequestRouter <<module>> {
-    +HandleRequest(req, service, currentLogin, usersFilePath, chatsFilePath) : vector<string>
+    +HandleRequest(req, service, currentLogin) : vector<string>
   }
 
   class Protocol <<module>> {
@@ -29,6 +29,8 @@ package "Server application (chat_server)" {
 package "Core service" {
   class ChatService {
     +ChatService()
+    +ChatService(storageManager)
+    +Initialize() : bool
     +Register(name, login, password) : bool
     +Authenticate(login, password) : bool
     +GetUserNameByLogin(login) : string
@@ -37,12 +39,12 @@ package "Core service" {
     +GetMessages(currentLogin, chatName) : vector<Message>
     +SendMessage(currentLogin, chatName, text) : bool
     +GetAllUserLogins() : vector<string>
-    +LoadState(usersFilePath, chatsFilePath) : bool
-    +SaveState(usersFilePath, chatsFilePath) : bool
+    +ImportState(state) : bool
     -FindUser(login) : User*
     -FindChat(name) : BaseChat*
     -m_users : unordered_map<string, unique_ptr<User>>
     -m_chats : unordered_map<string, unique_ptr<BaseChat>>
+    -m_storageManager : IManager*
   }
 
   class User {
@@ -85,6 +87,19 @@ package "Core service" {
   }
 }
 
+package "Storage" {
+  interface IManager {
+    +Initialize() : bool
+    +Load(state) : bool
+    +AddUser(user) : bool
+    +AddChat(chat) : bool
+    +AddMessage(chatName, senderLogin, message) : bool
+    +Reset() : bool
+  }
+
+  class FileManager
+}
+
 package "Network" {
   class TcpSocket {
     +BindAndListen(port, backlog)
@@ -95,8 +110,7 @@ package "Network" {
   }
 }
 
-database "users.db" as UsersDb
-database "chats.db" as ChatsDb
+file "users.db / chats.db" as StateFiles
 
 ServerMain ..> ChatService : creates shared instance
 ServerMain ..> TcpSocket : listen and accept
@@ -105,6 +119,9 @@ Session ..> TcpSocket : receive and send lines
 Session ..> Protocol : Split / Join
 Session ..> RequestRouter : route request under mutex
 RequestRouter ..> ChatService : execute command
+ChatService --> IManager : load and persist mutations
+IManager <|.. FileManager
+FileManager --> StateFiles
 
 ChatService *-- "0..*" User : m_users
 ChatService *-- "1..*" BaseChat : m_chats
@@ -114,8 +131,6 @@ PrivateChat ..> User : participants identified by login
 User ..> PasswordProtector : Verify()
 ChatService ..> PasswordProtector : Hash() / IsHash()
 ChatService ..> PrivateChat : create and inspect
-ChatService --> UsersDb : LoadState / SaveState
-ChatService --> ChatsDb : LoadState / SaveState
 
 note right of RequestRouter
   Supported commands:
@@ -160,7 +175,7 @@ Session -> Protocol : Split(request, TAB)
 Protocol --> Session : request parts
 
 group shared service mutex locked
-  Session -> Router : HandleRequest(parts, service, currentLogin, paths)
+  Session -> Router : HandleRequest(parts, service, currentLogin)
   Router -> Service : call command method
   Service -> Service : validate user, arguments and limits
 
@@ -169,10 +184,10 @@ group shared service mutex locked
     Chat --> Service : result
   end
 
-  opt successful mutation
-    Router -> Service : SaveState(paths)
-    Service -> State : rewrite users and chats
+  opt registration, chat creation or message send
+    Service -> State : AddUser / AddChat / AddMessage
     State --> Service : write result
+    Service -> Service : update memory after success
   end
 
   Service --> Router : operation result

@@ -14,7 +14,7 @@
 - приватные чаты между двумя пользователями;
 - отправку и просмотр сообщений через консольное меню;
 - одновременную работу нескольких клиентов через TCP.
-- сохранение пользователей, чатов и истории сообщений между перезапусками сервера.
+- сохранение пользователей, чатов и истории сообщений в файлах.
 
 ## Требования
 
@@ -31,77 +31,45 @@
 - MinGW (g++ с поддержкой C++20)
 - MinGW добавлен в PATH
 
-## Сборка
-
-### Linux (Ubuntu, bash)
-
-```bash
-# Сгенерировать файлы сборки без тестов
-cmake -S . -B build -DBUILD_TESTING=OFF
-
-# Собрать проект (параллельно по ядрам CPU)
-cmake --build build -j
-```
-
-### Windows (PowerShell)
-
-```powershell
-# Сгенерировать файлы сборки без тестов
-cmake -S . -B build -G "MinGW Makefiles" -DBUILD_TESTING=OFF
-
-# Собрать проект
-cmake --build build
-```
-
-Пересборка с нуля:
-
-### Linux (Ubuntu, bash)
-
-```bash
-rm -rf build
-cmake -S . -B build -DBUILD_TESTING=OFF
-cmake --build build -j
-```
-
-### Windows (PowerShell)
-
-```powershell
-Remove-Item -Recurse -Force build
-cmake -S . -B build -G "MinGW Makefiles" -DBUILD_TESTING=OFF
-cmake --build build
-```
-
-## Запуск тестов
+## Сборка и тесты
 
 Тесты написаны на GoogleTest и подключены через CTest.
 Если GoogleTest не установлен в системе, CMake скачает его автоматически при конфигурации проекта.
-Тестовая конфигурация находится в `tests/CMakeLists.txt` и подключается только при `BUILD_TESTING=ON`.
+Приведённые ниже команды собирают приложение вместе с unit-, integration- и e2e-тестами.
 
 ### Linux (Ubuntu, bash)
 
 ```bash
-# Сгенерировать файлы сборки с включенными тестами
+# Опционально: удалить предыдущую сборку для полной пересборки с нуля
+rm -rf build
+
+# Сгенерировать файлы сборки и включить тесты
 cmake -S . -B build -DBUILD_TESTING=ON
 
-# Собрать unit-, integration- и e2e-тесты
-cmake --build build --target console_chat_unit_tests console_chat_integration_tests console_chat_e2e_tests -j
+# Собрать сервер, клиент и все тесты
+cmake --build build -j
 
-# Запустить все тесты
+# Запустить все тесты и показать подробности при ошибке
 ctest --test-dir build --output-on-failure
 ```
 
 ### Windows (PowerShell)
 
 ```powershell
-# Сгенерировать файлы сборки с включенными тестами
+# Опционально: удалить предыдущую сборку для полной пересборки с нуля
+Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
+
+# Сгенерировать файлы сборки MinGW и включить тесты
 cmake -S . -B build -G "MinGW Makefiles" -DBUILD_TESTING=ON
 
-# Собрать unit-, integration- и e2e-тесты
-cmake --build build --target console_chat_unit_tests console_chat_integration_tests console_chat_e2e_tests
+# Собрать сервер, клиент и все тесты
+cmake --build build
 
-# Запустить все тесты
+# Запустить все тесты и показать подробности при ошибке
 ctest --test-dir build --output-on-failure
 ```
+
+Для сборки только сервера и клиента укажите `-DBUILD_TESTING=OFF` и не запускайте `ctest`.
 
 Подробная информация о структуре тестов и списке проверок находится в [документации по тестам](tests/README.md).
 
@@ -160,11 +128,17 @@ ctest --test-dir build --output-on-failure
 - `include/console_chat/core/` — доменные модели и бизнес-логика
 - `include/console_chat/client/` — клиентский API и консольный интерфейс
 - `include/console_chat/network/` — TCP-сокет обёртка
+- `include/console_chat/storage/` — интерфейс и реализации постоянного хранилища
 - `src/core/` — реализации доменной логики
 - `src/client/` — клиентская реализация и точка входа клиента
 - `src/server/` — серверная точка входа и серверные обработчики протокола
 - `src/network/` — реализация сокетного слоя
+- `src/storage/` — файловый менеджер хранения
 - `CMakeLists.txt` — конфигурация сборки
+
+Хранилище подключается через интерфейс `IManager`. Текущий `FileManager` реализует
+точечные операции добавления пользователя, чата и сообщения. Будущая реализация для
+MySQL сможет заменить их отдельными SQL-запросами без изменений роутера и сетевых сессий.
 
 ## Диаграммы проекта
 
@@ -214,3 +188,11 @@ cmake -S . -B build -G "MinGW Makefiles"; cmake --build build; .\build\console_c
 ### 4
 
 - Добавть автоматическое обновление чата
+
+## 5
+
+- Файл с указанием необходимых зависимостей
+
+### 6
+
+- Файл с указанием версии

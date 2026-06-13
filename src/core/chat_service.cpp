@@ -3,38 +3,51 @@
 #include "console_chat/core/private_chat.h"
 
 #include <algorithm>
-#include <filesystem>
-#include <fstream>
-#include <iomanip>
-
-
-namespace fs = std::filesystem;
 
 namespace console_chat::core {
 
 constexpr size_t MAX_CHATS_ON_SERVER = 991;
 
-namespace {
-
-bool SetOwnerOnlyPermissions(const std::string& filePath) {
-#ifdef _WIN32
-    (void)filePath;
-    return true;
-#else
-    std::error_code ec;
-    fs::permissions(
-        filePath,
-        fs::perms::owner_read | fs::perms::owner_write,
-        fs::perm_options::replace,
-        ec);
-    return !ec;
-#endif
-}
-
-} // namespace
-
 ChatService::ChatService() {
     m_chats.try_emplace(GENERAL_CHAT_NAME, std::make_unique<BaseChat>());
+}
+
+ChatService::ChatService(storage::IManager& storageManager)
+    : ChatService()
+{
+    m_storageManager = &storageManager;
+}
+
+bool ChatService::Initialize() {
+    if (!m_storageManager) {
+        return true;
+    }
+
+    if (!m_storageManager->Initialize()) {
+        return false;
+    }
+
+    ServiceState state;
+    if (!m_storageManager->Load(state)) {
+        return false;
+    }
+
+    const bool hasGeneralChat = std::any_of(
+        state.Chats.begin(),
+        state.Chats.end(),
+        [](const ChatState& chat) { return chat.Name == GENERAL_CHAT_NAME; });
+
+    if (!ImportState(std::move(state))) {
+        return false;
+    }
+
+    if (!hasGeneralChat) {
+        ChatState generalChat;
+        generalChat.Name = GENERAL_CHAT_NAME;
+        return PersistChat(generalChat);
+    }
+
+    return true;
 }
 
 bool ChatService::Register(
@@ -42,9 +55,18 @@ bool ChatService::Register(
     std::string&& login,
     std::string&& password)
 {
+    if (m_users.contains(login)) {
+        return false;
+    }
+
     std::string passwordHash = PasswordProtector::Hash(password);
+    const UserState userState{login, name, passwordHash};
+    if (!PersistUser(userState)) {
+        return false;
+    }
+
     const auto [_, inserted] =
-        m_users.try_emplace(login, std::make_unique<User>(std::move(name), std::move(passwordHash)));
+        m_users.try_emplace(std::move(login), std::make_unique<User>(std::move(name), std::move(passwordHash)));
 
     return inserted;
 }
@@ -154,10 +176,17 @@ bool ChatService::CreatePrivateChat(
         return false;
     }
 
+    ChatState chatState;
+    chatState.Name = chatName;
+    chatState.IsPrivate = true;
+    chatState.Participants = {currentLogin, recipientLogin};
+    if (!PersistChat(chatState)) {
+        return false;
+    }
+
     const auto [_, inserted] = m_chats.try_emplace(
         std::move(chatName),
-        std::make_unique<PrivateChat>(currentLogin, recipientLogin)
-    );
+        std::make_unique<PrivateChat>(currentLogin, std::move(recipientLogin)));
 
     return inserted;
 }
@@ -201,15 +230,23 @@ bool ChatService::SendMessage(const std::string& currentLogin, const std::string
         return false;
     }
 
+    if (chat->GetMessages().size() >= MAX_MESSAGES_PER_CHAT) {
+        return false;
+    }
+
     const auto userIt = m_users.find(currentLogin);
     if (userIt == m_users.end()) {
         return false;
     }
 
-    return chat->AddMessage(Message{
-            std::get<std::unique_ptr<User>>(*userIt)->GetName(),
-            std::move(text)
-        });
+    Message message{
+        std::get<std::unique_ptr<User>>(*userIt)->GetName(),
+        std::move(text)};
+    if (!PersistMessage(chatName, currentLogin, message)) {
+        return false;
+    }
+
+    return chat->AddMessage(std::move(message));
 }
 
 User* ChatService::FindUser(const std::string& login) const {
@@ -222,127 +259,54 @@ BaseChat* ChatService::FindChat(const std::string& name) const {
     return it != m_chats.end() ? std::get<std::unique_ptr<BaseChat>>(*it).get() : nullptr;
 }
 
-bool ChatService::SaveState(const std::string& usersFilePath, const std::string& chatsFilePath) const {
-    {
-        std::ofstream usersOut(usersFilePath, std::ios::trunc);
-        if (!usersOut) {
-            return false;
-        }
-
-        usersOut << m_users.size() << '\n';
-        for (const auto& [login, user] : m_users) {
-            usersOut << std::quoted(login) << ' '
-                     << std::quoted(user->GetName()) << ' '
-                     << std::quoted(user->GetPasswordHash()) << '\n';
-        }
-    }
-    if (!SetOwnerOnlyPermissions(usersFilePath)) {
-        return false;
-    }
-
-    {
-        std::ofstream chatsOut(chatsFilePath, std::ios::trunc);
-        if (!chatsOut) {
-            return false;
-        }
-
-        chatsOut << m_chats.size() << '\n';
-        for (const auto& [chatName, chat] : m_chats) {
-            const auto* privateChat = dynamic_cast<const PrivateChat*>(chat.get());
-            const int isPrivate = privateChat ? 1 : 0;
-
-            chatsOut << std::quoted(chatName) << ' ' << isPrivate << '\n';
-            if (isPrivate) {
-                const auto& users = privateChat->GetUsers();
-                chatsOut << std::quoted(users[0]) << ' ' << std::quoted(users[1]) << '\n';
-            }
-
-            const auto& messages = chat->GetMessages();
-            chatsOut << messages.size() << '\n';
-            for (const auto& msg : messages) {
-                chatsOut << std::quoted(msg.Name) << ' ' << std::quoted(msg.Text) << '\n';
-            }
-        }
-    }
-    if (!SetOwnerOnlyPermissions(chatsFilePath)) {
-        return false;
-    }
-
-    return true;
-}
-
-bool ChatService::LoadState(const std::string& usersFilePath, const std::string& chatsFilePath) {
-    std::ifstream usersIn(usersFilePath);
-    std::ifstream chatsIn(chatsFilePath);
-    if (!usersIn || !chatsIn) {
-        return false;
-    }
-
+bool ChatService::ImportState(ServiceState state) {
     std::unordered_map<std::string, std::unique_ptr<User>> loadedUsers;
     std::unordered_map<std::string, std::unique_ptr<BaseChat>> loadedChats;
 
-    size_t usersCount = 0;
-    if (!(usersIn >> usersCount)) {
+    if (state.Chats.size() > MAX_CHATS_ON_SERVER) {
         return false;
     }
 
-    for (size_t i = 0; i < usersCount; ++i) {
-        std::string login;
-        std::string name;
-        std::string passwordHash;
-        if (!(usersIn >> std::quoted(login) >> std::quoted(name) >> std::quoted(passwordHash))) {
+    loadedUsers.reserve(state.Users.size());
+    for (auto& user : state.Users) {
+        if (!PasswordProtector::IsHash(user.PasswordHash)) {
             return false;
         }
 
-        if (!PasswordProtector::IsHash(passwordHash)) {
+        const auto [_, inserted] = loadedUsers.try_emplace(
+            std::move(user.Login),
+            std::make_unique<User>(std::move(user.Name), std::move(user.PasswordHash)));
+        if (!inserted) {
             return false;
         }
-
-        loadedUsers.try_emplace(
-            login,
-            std::make_unique<User>(std::move(name), std::move(passwordHash)));
     }
 
-    size_t chatsCount = 0;
-    if (!(chatsIn >> chatsCount)) {
-        return false;
-    }
-
-    for (size_t i = 0; i < chatsCount; ++i) {
-        std::string chatName;
-        int isPrivate = 0;
-        if (!(chatsIn >> std::quoted(chatName) >> isPrivate)) {
-            return false;
-        }
-
+    loadedChats.reserve(state.Chats.size() + 1);
+    for (auto& chatState : state.Chats) {
         std::unique_ptr<BaseChat> chat;
-        if (isPrivate == 1) {
-            std::string user1;
-            std::string user2;
-            if (!(chatsIn >> std::quoted(user1) >> std::quoted(user2))) {
+        if (chatState.IsPrivate) {
+            if (!loadedUsers.contains(chatState.Participants[0]) ||
+                !loadedUsers.contains(chatState.Participants[1]))
+            {
                 return false;
             }
-            chat = std::make_unique<PrivateChat>(std::move(user1), std::move(user2));
+            chat = std::make_unique<PrivateChat>(
+                std::move(chatState.Participants[0]),
+                std::move(chatState.Participants[1]));
         } else {
             chat = std::make_unique<BaseChat>();
         }
 
-        size_t messagesCount = 0;
-        if (!(chatsIn >> messagesCount)) {
-            return false;
-        }
-        for (size_t m = 0; m < messagesCount; ++m) {
-            std::string senderName;
-            std::string text;
-            if (!(chatsIn >> std::quoted(senderName) >> std::quoted(text))) {
-                return false;
-            }
-            if (!chat->AddMessage(Message{std::move(senderName), std::move(text)})) {
+        for (auto& message : chatState.Messages) {
+            if (!chat->AddMessage(std::move(message))) {
                 return false;
             }
         }
 
-        loadedChats.try_emplace(std::move(chatName), std::move(chat));
+        const auto [_, inserted] = loadedChats.try_emplace(std::move(chatState.Name), std::move(chat));
+        if (!inserted) {
+            return false;
+        }
     }
 
     if (!loadedChats.contains(GENERAL_CHAT_NAME)) {
@@ -352,6 +316,23 @@ bool ChatService::LoadState(const std::string& usersFilePath, const std::string&
     m_users = std::move(loadedUsers);
     m_chats = std::move(loadedChats);
     return true;
+}
+
+bool ChatService::PersistUser(const UserState& user) {
+    return !m_storageManager || m_storageManager->AddUser(user);
+}
+
+bool ChatService::PersistChat(const ChatState& chat) {
+    return !m_storageManager || m_storageManager->AddChat(chat);
+}
+
+bool ChatService::PersistMessage(
+    const std::string& chatName,
+    const std::string& senderLogin,
+    const Message& message)
+{
+    return !m_storageManager ||
+        m_storageManager->AddMessage(chatName, senderLogin, message);
 }
 
 } // namespace console_chat::core

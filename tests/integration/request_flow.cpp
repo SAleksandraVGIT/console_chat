@@ -1,4 +1,5 @@
 #include "console_chat/core/chat_service.h"
+#include "console_chat/storage/file_manager.h"
 
 #include "protocol.h"
 #include "request_router.h"
@@ -7,7 +8,9 @@
 
 #include <chrono>
 #include <filesystem>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 
@@ -16,6 +19,7 @@ using console_chat::core::GENERAL_CHAT_NAME;
 using console_chat::server::HandleRequest;
 using console_chat::server::Join;
 using console_chat::server::Split;
+using console_chat::storage::FileManager;
 
 namespace fs = std::filesystem;
 
@@ -32,7 +36,9 @@ protected:
     void SetUp() override {
         usersFile = MakeTempPath("users.db");
         chatsFile = MakeTempPath("chats.db");
-        ASSERT_TRUE(service.SaveState(usersFile.string(), chatsFile.string()));
+        storage = std::make_unique<FileManager>(usersFile.string(), chatsFile.string());
+        service = std::make_unique<ChatService>(*storage);
+        ASSERT_TRUE(service->Initialize());
     }
 
     void TearDown() override {
@@ -45,12 +51,13 @@ protected:
         const std::vector<std::string>& req,
         std::string& currentLogin)
     {
-        return HandleRequest(req, service, currentLogin, usersFile.string(), chatsFile.string());
+        return HandleRequest(req, *service, currentLogin);
     }
 
-    ChatService service;
     fs::path usersFile;
     fs::path chatsFile;
+    std::unique_ptr<FileManager> storage;
+    std::unique_ptr<ChatService> service;
 };
 
 TEST(Protocol, SplitJoin) {
@@ -118,15 +125,16 @@ TEST_F(RequestFlow, StateReload) {
     ASSERT_EQ(Request({"LOGIN", "user_1", "secret"}, session), (std::vector<std::string>{"OK"}));
     ASSERT_EQ(Request({"SEND_MESSAGE", GENERAL_CHAT_NAME, "Saved message"}, session), (std::vector<std::string>{"OK"}));
 
-    ChatService loaded;
-    ASSERT_TRUE(loaded.LoadState(usersFile.string(), chatsFile.string()));
+    FileManager loadedStorage(usersFile.string(), chatsFile.string());
+    ChatService loaded(loadedStorage);
+    ASSERT_TRUE(loaded.Initialize());
 
     std::string loadedSession;
     EXPECT_EQ(
-        HandleRequest({"LOGIN", "user_1", "secret"}, loaded, loadedSession, usersFile.string(), chatsFile.string()),
+        HandleRequest({"LOGIN", "user_1", "secret"}, loaded, loadedSession),
         (std::vector<std::string>{"OK"}));
     EXPECT_EQ(
-        HandleRequest({"GET_MESSAGES", GENERAL_CHAT_NAME}, loaded, loadedSession, usersFile.string(), chatsFile.string()),
+        HandleRequest({"GET_MESSAGES", GENERAL_CHAT_NAME}, loaded, loadedSession),
         (std::vector<std::string>{"OK", "User_1", "Saved message"}));
 }
 

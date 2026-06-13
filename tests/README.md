@@ -56,6 +56,7 @@ ctest --test-dir build -L e2e --output-on-failure
 | `ChatService.PrivateChat` | Создание приватного чата и запрет некорректных вариантов. |
 | `ChatService.PrivateAccess` | Только участники приватного чата могут писать и читать его сообщения. |
 | `ChatService.PrivateLimit` | Ограничение на `45` приватных чатов для пользователя. |
+| `ChatService.StorageFailureDoesNotChangeMemoryState` | Ошибка точечной записи пользователя, чата или сообщения не изменяет состояние в памяти. |
 | `ChatServiceState.SaveLoad` | Сохранение и загрузка пользователей, чатов и сообщений. |
 | `ChatServiceState.InvalidLoad` | Неудачная загрузка не ломает текущее состояние сервиса. |
 

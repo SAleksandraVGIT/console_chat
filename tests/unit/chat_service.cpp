@@ -1,11 +1,14 @@
 #include "console_chat/core/chat_service.h"
+#include "console_chat/storage/file_manager.h"
 
 #include <gtest/gtest.h>
 
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 
@@ -14,10 +17,79 @@ using console_chat::core::ChatService;
 using console_chat::core::GENERAL_CHAT_NAME;
 using console_chat::core::MAX_MESSAGE_LENGTH;
 using console_chat::core::MAX_PRIVATE_CHATS_PER_USER;
+using console_chat::storage::FileManager;
 
 namespace fs = std::filesystem;
 
 namespace {
+
+class FailingManager final : public console_chat::storage::IManager {
+public:
+    FailingManager() {
+        console_chat::core::ChatState generalChat;
+        generalChat.Name = GENERAL_CHAT_NAME;
+        state.Chats.push_back(std::move(generalChat));
+    }
+
+    bool Initialize() override {
+        return true;
+    }
+
+    bool Load(console_chat::core::ServiceState& loaded) override {
+        loaded = state;
+        return true;
+    }
+
+    bool AddUser(const console_chat::core::UserState& user) override {
+        if (failAddUser) {
+            return false;
+        }
+        state.Users.push_back(user);
+        return true;
+    }
+
+    bool AddChat(const console_chat::core::ChatState& chat) override {
+        if (failAddChat) {
+            return false;
+        }
+        state.Chats.push_back(chat);
+        return true;
+    }
+
+    bool AddMessage(
+        const std::string& chatName,
+        const std::string&,
+        const console_chat::core::Message& message) override
+    {
+        if (failAddMessage) {
+            return false;
+        }
+
+        const auto chat = std::find_if(
+            state.Chats.begin(),
+            state.Chats.end(),
+            [&chatName](const console_chat::core::ChatState& stored) {
+                return stored.Name == chatName;
+            });
+
+        if (chat == state.Chats.end()) {
+            return false;
+        }
+
+        chat->Messages.push_back(message);
+        return true;
+    }
+
+    bool Reset() override {
+        state = {};
+        return true;
+    }
+
+    bool failAddUser = false;
+    bool failAddChat = false;
+    bool failAddMessage = false;
+    console_chat::core::ServiceState state;
+};
 
 bool Contains(const std::vector<std::string>& values, const std::string& value) {
     return std::find(values.begin(), values.end(), value) != values.end();
@@ -168,8 +240,35 @@ TEST(ChatService, PrivateLimit) {
     EXPECT_FALSE(service.CreatePrivateChat("user_1", "overflow", "chat_overflow"));
 }
 
+TEST(ChatService, StorageFailureDoesNotChangeMemoryState) {
+    FailingManager storage;
+    ChatService service(storage);
+    ASSERT_TRUE(service.Initialize());
+
+    storage.failAddUser = true;
+    EXPECT_FALSE(service.Register("User_1", "user_1", "secret"));
+    EXPECT_FALSE(service.Authenticate("user_1", "secret"));
+
+    storage.failAddUser = false;
+    ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
+    ASSERT_TRUE(service.Register("User_2", "user_2", "secret"));
+
+    storage.failAddChat = true;
+    EXPECT_FALSE(service.CreatePrivateChat("user_1", "user_2", "user_1&2"));
+    EXPECT_FALSE(Contains(service.GetMyChats("user_1"), "user_1&2"));
+
+    storage.failAddChat = false;
+    ASSERT_TRUE(service.CreatePrivateChat("user_1", "user_2", "user_1&2"));
+
+    storage.failAddMessage = true;
+    EXPECT_FALSE(service.SendMessage("user_1", "user_1&2", "Not persisted"));
+    EXPECT_TRUE(service.GetMessages("user_1", "user_1&2").empty());
+}
+
 TEST_F(ChatServiceState, SaveLoad) {
-    ChatService service;
+    FileManager storage(usersFile.string(), chatsFile.string());
+    ChatService service(storage);
+    ASSERT_TRUE(service.Initialize());
 
     ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
     ASSERT_TRUE(service.Register("User_2", "user_2", "password"));
@@ -177,10 +276,9 @@ TEST_F(ChatServiceState, SaveLoad) {
     ASSERT_TRUE(service.SendMessage("user_1", GENERAL_CHAT_NAME, "Hello general"));
     ASSERT_TRUE(service.SendMessage("user_1", "user_1&2", "Hello User_2"));
 
-    ASSERT_TRUE(service.SaveState(usersFile.string(), chatsFile.string()));
-
-    ChatService loaded;
-    ASSERT_TRUE(loaded.LoadState(usersFile.string(), chatsFile.string()));
+    FileManager loadedStorage(usersFile.string(), chatsFile.string());
+    ChatService loaded(loadedStorage);
+    ASSERT_TRUE(loaded.Initialize());
 
     EXPECT_TRUE(loaded.Authenticate("user_1", "secret"));
     EXPECT_TRUE(loaded.Authenticate("user_2", "password"));
@@ -202,13 +300,16 @@ TEST_F(ChatServiceState, SaveLoad) {
 }
 
 TEST_F(ChatServiceState, InvalidLoad) {
-    ChatService service;
+    std::ofstream usersOut(usersFile);
+    ASSERT_TRUE(usersOut.is_open());
+    usersOut << "invalid state\n";
+    usersOut.close();
 
-    ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
-    ASSERT_FALSE(service.LoadState(usersFile.string(), chatsFile.string()));
+    FileManager storage(usersFile.string(), chatsFile.string());
+    ChatService service(storage);
+    ASSERT_FALSE(service.Initialize());
 
-    EXPECT_TRUE(service.Authenticate("user_1", "secret"));
-    EXPECT_EQ(service.GetMyChats("user_1"), (std::vector<std::string>{GENERAL_CHAT_NAME}));
+    EXPECT_FALSE(service.Authenticate("user_1", "secret"));
 }
 
 } // namespace

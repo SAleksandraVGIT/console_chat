@@ -1,24 +1,22 @@
 #include "console_chat/core/chat_service.h"
 #include "console_chat/network/tcp_socket.h"
+#include "console_chat/storage/file_manager.h"
 
 #include "session.h"
 
-#include <filesystem>
 #include <iostream>
 #include <mutex>
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <utility>
 
 namespace {
-
-namespace fs = std::filesystem;
 
 constexpr int DEFAULT_PORT = 7777;
 constexpr int BACKLOG = 10;
 constexpr int MIN_PORT = 1024;
 constexpr int MAX_PORT = 49151;
-constexpr const char* DEFAULT_STATE_DIR = "data";
 constexpr const char* DEFAULT_USERS_FILE = "data/users.db";
 constexpr const char* DEFAULT_CHATS_FILE = "data/chats.db";
 
@@ -61,29 +59,20 @@ int main(int argc, char* argv[]) {
         throw std::runtime_error("Port must be in range 1024..49151.");
     }
 
-    console_chat::core::ChatService service;
-    fs::create_directories(fs::path(DEFAULT_STATE_DIR));
-    const auto usersDir = fs::path(usersFilePath).parent_path();
-    const auto chatsDir = fs::path(chatsFilePath).parent_path();
-
-    if (!usersDir.empty()) {
-        fs::create_directories(usersDir);
-    }
-    if (!chatsDir.empty()) {
-        fs::create_directories(chatsDir);
-    }
-
+    console_chat::storage::FileManager storageManager(usersFilePath, chatsFilePath);
     if (resetState) {
-        std::error_code ec;
-        fs::remove(usersFilePath, ec);
-        fs::remove(chatsFilePath, ec);
+        if (!storageManager.Reset()) {
+            throw std::runtime_error("Failed to reset saved state.");
+        }
         std::cout << "State reset requested. Starting with empty state.\n";
-    } else if (!service.LoadState(usersFilePath, chatsFilePath)) {
-        std::cout << "No valid saved state found. Starting with empty state.\n";
     }
 
-    if (!service.SaveState(usersFilePath, chatsFilePath)) {
-        throw std::runtime_error("Failed to initialize state files.");
+    console_chat::core::ChatService service(storageManager);
+    if (!service.Initialize()) {
+        if (resetState || !storageManager.Reset() || !service.Initialize()) {
+            throw std::runtime_error("Failed to initialize persistent state.");
+        }
+        std::cout << "No valid saved state found. Starting with empty state.\n";
     }
 
     console_chat::network::TcpSocket serverSock;
@@ -97,13 +86,11 @@ int main(int argc, char* argv[]) {
             continue;
         }
 
-        std::thread([client = std::move(clientSock), &service, &serviceMutex, usersFilePath, chatsFilePath]() mutable {
+        std::thread([client = std::move(clientSock), &service, &serviceMutex]() mutable {
             console_chat::server::HandleClientSession(
                 std::move(client),
                 service,
-                serviceMutex,
-                usersFilePath,
-                chatsFilePath);
+                serviceMutex);
         }).detach();
     }
 }

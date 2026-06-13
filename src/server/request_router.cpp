@@ -5,9 +5,7 @@ namespace console_chat::server {
 std::vector<std::string> HandleRequest(
     const std::vector<std::string>& req,
     core::ChatService& service,
-    std::string& currentLogin,
-    const std::string& usersFilePath,
-    const std::string& chatsFilePath)
+    std::string& currentLogin)
 {
     if (req.empty()) {
         return {"ERR", "empty request"};
@@ -17,9 +15,6 @@ std::vector<std::string> HandleRequest(
 
     if (cmd == "REGISTER" && req.size() == 4) {
         const bool ok = service.Register(std::string(req[1]), std::string(req[2]), std::string(req[3]));
-        if (ok && !service.SaveState(usersFilePath, chatsFilePath)) {
-            return {"ERR", "state save failed"};
-        }
         return ok ? std::vector<std::string>{"OK"} : std::vector<std::string>{"ERR", "register failed"};
     }
 
@@ -53,9 +48,6 @@ std::vector<std::string> HandleRequest(
 
     if (cmd == "CREATE_PRIVATE" && req.size() == 3) {
         const bool ok = service.CreatePrivateChat(currentLogin, std::string(req[1]), std::string(req[2]));
-        if (ok && !service.SaveState(usersFilePath, chatsFilePath)) {
-            return {"ERR", "state save failed"};
-        }
         return ok ? std::vector<std::string>{"OK"} : std::vector<std::string>{"ERR", "create private failed"};
     }
 
@@ -71,9 +63,6 @@ std::vector<std::string> HandleRequest(
 
     if (cmd == "SEND_MESSAGE" && req.size() == 3) {
         const bool ok = service.SendMessage(currentLogin, req[1], std::string(req[2]));
-        if (ok && !service.SaveState(usersFilePath, chatsFilePath)) {
-            return {"ERR", "state save failed"};
-        }
         return ok ? std::vector<std::string>{"OK"} : std::vector<std::string>{"ERR", "send failed"};
     }
 

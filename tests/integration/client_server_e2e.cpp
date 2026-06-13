@@ -1,6 +1,7 @@
 #include "console_chat/client/chat_client.h"
 #include "console_chat/core/chat_service.h"
 #include "console_chat/network/tcp_socket.h"
+#include "console_chat/storage/file_manager.h"
 
 #include "session.h"
 
@@ -30,6 +31,7 @@ using console_chat::core::ChatService;
 using console_chat::core::GENERAL_CHAT_NAME;
 using console_chat::network::TcpSocket;
 using console_chat::server::HandleClientSession;
+using console_chat::storage::FileManager;
 
 namespace fs = std::filesystem;
 
@@ -95,16 +97,13 @@ uint16_t FindFreePort() {
 
 class TestServer {
 public:
-    TestServer(
-        uint16_t port,
-        int expectedClients,
-        fs::path usersFile,
-        fs::path chatsFile)
+    TestServer(const uint16_t port, const int expectedClients, fs::path usersFile, fs::path chatsFile)
         : m_usersFile(std::move(usersFile))
         , m_chatsFile(std::move(chatsFile))
+        , m_storage(m_usersFile.string(), m_chatsFile.string())
+        , m_service(m_storage)
     {
-        m_service.LoadState(m_usersFile.string(), m_chatsFile.string());
-        if (!m_service.SaveState(m_usersFile.string(), m_chatsFile.string())) {
+        if (!m_service.Initialize()) {
             throw std::runtime_error("Failed to initialize test server state.");
         }
 
@@ -120,9 +119,7 @@ public:
                     HandleClientSession(
                         std::move(client),
                         m_service,
-                        m_mutex,
-                        m_usersFile.string(),
-                        m_chatsFile.string());
+                        m_mutex);
                 });
             }
         });
@@ -141,13 +138,14 @@ public:
     }
 
 private:
-    ChatService m_service;
     std::mutex m_mutex;
     TcpSocket m_server;
     std::thread m_acceptThread;
     std::vector<std::thread> m_sessions;
     fs::path m_usersFile;
     fs::path m_chatsFile;
+    FileManager m_storage;
+    ChatService m_service;
 };
 
 class ClientServerE2E : public ::testing::Test {
