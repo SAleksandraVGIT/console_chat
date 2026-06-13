@@ -1,0 +1,111 @@
+@startuml console_chat_components
+title console_chat - high-level component interaction
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+skinparam linetype ortho
+skinparam wrapWidth 220
+
+actor "Console user" as User
+
+node "Client process: console_chat" as ClientNode {
+  [ChatConsole] as Console
+  [ChatClient] as Client
+  [Client TcpSocket] as ClientSocket
+}
+
+cloud "TCP/IP\nline protocol on port 7777" as Network
+
+node "Server process: chat_server" as ServerNode {
+  [Listen TcpSocket] as ListenSocket
+  [Client session thread] as Session
+  [Request router] as Router
+  [Shared ChatService] as Service
+}
+
+database "Persistent state" as State {
+  file "users.db" as UsersDb
+  file "chats.db" as ChatsDb
+}
+
+package "Domain objects" as Domain {
+  [User] as UserEntity
+  [BaseChat] as GeneralChat
+  [PrivateChat] as PrivateChat
+  [Message] as Message
+  [PasswordProtector] as Password
+}
+
+User --> Console : commands and messages
+Console --> Client : client API calls
+Client --> ClientSocket : request / response lines
+ClientSocket --> Network
+Network --> ListenSocket
+ListenSocket --> Session : accepted connection
+Session --> Router : parsed request
+Router --> Service : synchronized operation
+Service --> UsersDb : load / save
+Service --> ChatsDb : load / save
+Service --> UserEntity : owns users
+Service --> GeneralChat : owns GENERAL chat
+Service --> PrivateChat : owns private chats
+GeneralChat --> Message : stores
+PrivateChat --> Message : stores
+UserEntity --> Password : password verification
+
+note bottom of Network
+  One request and one response per line.
+  Fields are separated by TAB.
+end note
+
+note right of Session
+  The server creates one detached thread
+  and one currentLogin value per connection.
+  A shared mutex protects ChatService.
+end note
+
+@enduml
+
+@startuml console_chat_end_to_end
+title console_chat - end-to-end interaction
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam wrapWidth 220
+
+actor "Console user" as User
+participant "ChatConsole" as Console
+participant "ChatClient" as Client
+participant "Client TcpSocket" as ClientSocket
+participant "Server TcpSocket" as ServerSocket
+participant "Session thread" as Session
+participant "Request router" as Router
+participant "ChatService" as Service
+database "State files" as State
+
+User -> Console : choose operation
+Console -> Client : API call
+Client -> ClientSocket : SendLine(command)
+ClientSocket -> ServerSocket : TCP request
+ServerSocket -> Session : RecvLine()
+
+group mutex protects shared ChatService
+  Session -> Router : HandleRequest()
+  Router -> Service : domain method
+  Service --> Router : result
+
+  opt registration, private chat creation or message send
+    Router -> Service : SaveState()
+    Service -> State : write users.db and chats.db
+  end
+
+  Router --> Session : OK or ERR response
+end
+
+Session -> ServerSocket : SendLine(response)
+ServerSocket --> ClientSocket : TCP response
+ClientSocket --> Client : response line
+Client --> Console : parsed result
+Console --> User : display result
+
+@enduml

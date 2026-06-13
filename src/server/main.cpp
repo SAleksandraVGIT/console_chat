@@ -65,6 +65,7 @@ int main(int argc, char* argv[]) {
     fs::create_directories(fs::path(DEFAULT_STATE_DIR));
     const auto usersDir = fs::path(usersFilePath).parent_path();
     const auto chatsDir = fs::path(chatsFilePath).parent_path();
+
     if (!usersDir.empty()) {
         fs::create_directories(usersDir);
     }
@@ -95,6 +96,7 @@ int main(int argc, char* argv[]) {
         if (!clientSock.IsValid()) {
             continue;
         }
+
         std::thread([client = std::move(clientSock), &service, &serviceMutex, usersFilePath, chatsFilePath]() mutable {
             console_chat::server::HandleClientSession(
                 std::move(client),

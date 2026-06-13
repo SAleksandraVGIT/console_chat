@@ -1,0 +1,186 @@
+@startuml console_chat_service
+allowmixing
+title console_chat - server service and domain model
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam wrapWidth 220
+
+package "Server application (chat_server)" {
+  class ServerMain <<entry point>> {
+    +main(argc, argv) : int
+  }
+
+  class Session <<module>> {
+    +HandleClientSession(client, service, serviceMutex, usersFilePath, chatsFilePath)
+  }
+
+  class RequestRouter <<module>> {
+    +HandleRequest(req, service, currentLogin, usersFilePath, chatsFilePath) : vector<string>
+  }
+
+  class Protocol <<module>> {
+    +Split(line, delim) : vector<string>
+    +Join(parts, delim) : string
+  }
+}
+
+package "Core service" {
+  class ChatService {
+    +ChatService()
+    +Register(name, login, password) : bool
+    +Authenticate(login, password) : bool
+    +GetUserNameByLogin(login) : string
+    +GetMyChats(currentLogin) : vector<string>
+    +CreatePrivateChat(currentLogin, recipientLogin, chatName) : bool
+    +GetMessages(currentLogin, chatName) : vector<Message>
+    +SendMessage(currentLogin, chatName, text) : bool
+    +GetAllUserLogins() : vector<string>
+    +LoadState(usersFilePath, chatsFilePath) : bool
+    +SaveState(usersFilePath, chatsFilePath) : bool
+    -FindUser(login) : User*
+    -FindChat(name) : BaseChat*
+    -m_users : unordered_map<string, unique_ptr<User>>
+    -m_chats : unordered_map<string, unique_ptr<BaseChat>>
+  }
+
+  class User {
+    +User(name, passwordHash)
+    +GetName() : const string&
+    +CheckPassword(password) : bool
+    +GetPasswordHash() : const string&
+    -m_name : string
+    -m_passwordHash : string
+  }
+
+  class PasswordProtector {
+    +{static} Hash(password) : string
+    +{static} Verify(password, expectedHash) : bool
+    +{static} IsHash(value) : bool
+    -{static} HASH_PREFIX : string_view = "h1$"
+  }
+
+  class BaseChat {
+    +~BaseChat()
+    +IsParticipant(login) : bool
+    +IsPrivate() : bool
+    +GetMessages() : const vector<Message>&
+    +AddMessage(message) : bool
+    #m_messages : vector<Message>
+  }
+
+  class PrivateChat {
+    +PrivateChat(user1, user2)
+    +IsParticipant(login) : bool
+    +IsPrivate() : bool
+    +HasUser(login) : bool
+    +GetUsers() : const array<string, 2>&
+    -m_users : array<string, 2>
+  }
+
+  class Message <<struct>> {
+    +Name : string
+    +Text : string
+  }
+}
+
+package "Network" {
+  class TcpSocket {
+    +BindAndListen(port, backlog)
+    +Accept() : TcpSocket
+    +SendLine(line) : bool
+    +RecvLine(line) : bool
+    +IsValid() : bool
+  }
+}
+
+database "users.db" as UsersDb
+database "chats.db" as ChatsDb
+
+ServerMain ..> ChatService : creates shared instance
+ServerMain ..> TcpSocket : listen and accept
+ServerMain ..> Session : detached thread per client
+Session ..> TcpSocket : receive and send lines
+Session ..> Protocol : Split / Join
+Session ..> RequestRouter : route request under mutex
+RequestRouter ..> ChatService : execute command
+
+ChatService *-- "0..*" User : m_users
+ChatService *-- "1..*" BaseChat : m_chats
+BaseChat *-- "0..1000" Message : m_messages
+BaseChat <|-- PrivateChat
+PrivateChat ..> User : participants identified by login
+User ..> PasswordProtector : Verify()
+ChatService ..> PasswordProtector : Hash() / IsHash()
+ChatService ..> PrivateChat : create and inspect
+ChatService --> UsersDb : LoadState / SaveState
+ChatService --> ChatsDb : LoadState / SaveState
+
+note right of RequestRouter
+  Supported commands:
+  REGISTER, LOGIN, LOGOUT, IS_AUTH,
+  CUR_USER, GET_MY_CHATS, CREATE_PRIVATE,
+  GET_MESSAGES, SEND_MESSAGE, GET_ALL_USERS
+end note
+
+note right of ChatService
+  Domain limits:
+  - GENERAL chat always exists
+  - maximum 991 chats on server
+  - maximum 45 private chats per user
+  - maximum message length is 256
+  - maximum 1000 messages per chat
+end note
+
+note bottom of PasswordProtector
+  Passwords are stored as salted hashes
+  with the h1$ prefix.
+end note
+
+@enduml
+
+@startuml console_chat_service_request
+title console_chat - service request processing
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam wrapWidth 220
+
+participant "TcpSocket" as Socket
+participant "HandleClientSession" as Session
+participant "Protocol" as Protocol
+participant "HandleRequest" as Router
+participant "ChatService" as Service
+participant "BaseChat / PrivateChat" as Chat
+database "users.db / chats.db" as State
+
+Socket -> Session : RecvLine(request)
+Session -> Protocol : Split(request, TAB)
+Protocol --> Session : request parts
+
+group shared service mutex locked
+  Session -> Router : HandleRequest(parts, service, currentLogin, paths)
+  Router -> Service : call command method
+  Service -> Service : validate user, arguments and limits
+
+  opt chat command
+    Service -> Chat : participant check or message operation
+    Chat --> Service : result
+  end
+
+  opt successful mutation
+    Router -> Service : SaveState(paths)
+    Service -> State : rewrite users and chats
+    State --> Service : write result
+  end
+
+  Service --> Router : operation result
+  Router --> Session : OK data or ERR description
+end
+
+Session -> Protocol : Join(response, TAB)
+Protocol --> Session : response line
+Session -> Socket : SendLine(response)
+
+@enduml

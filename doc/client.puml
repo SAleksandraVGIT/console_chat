@@ -1,0 +1,149 @@
+@startuml console_chat_client
+allowmixing
+title console_chat - client
+
+skinparam classAttributeIconSize 0
+skinparam shadowing false
+skinparam linetype ortho
+skinparam wrapWidth 220
+
+actor "Console user" as User
+
+package "Client application (console_chat)" {
+  class ClientMain <<entry point>> {
+    +main(argc, argv) : int
+  }
+
+  class ChatConsole {
+    +ChatConsole(service)
+    +Run() : int
+    -UserMenu()
+    -RegistrationFlow()
+    -LoginFlow()
+    -CreatePrivateChatFlow()
+    -OpenChatFlow()
+    -OpenGeneralChatFlow()
+    -ChatSession(chatName)
+    -ShowMyChatsFlow()
+    -ShowAllUsersFlow()
+    -ShowMainMenu()
+    -ShowUserMenu()
+    -m_service : ChatClient&
+  }
+
+  class ChatClient {
+    +ChatClient(host, port)
+    +~ChatClient()
+    +Register(name, login, password) : bool
+    +Authenticate(login, password) : bool
+    +Logout()
+    +IsAuthenticated() : bool
+    +GetCurrentUserName() : string
+    +GetMyChats() : vector<string>
+    +CreatePrivateChat(recipientLogin, chatName) : bool
+    +GetMessages(chatName) : vector<Message>
+    +SendMessage(chatName, text) : bool
+    +GetAllUserLogins() : vector<string>
+    -Request(parts) : vector<string>
+    -{static} Split(line, delim) : vector<string>
+    -m_socket : TcpSocket
+  }
+
+  enum ActionMainMenu {
+    EXIT = 0
+    REGISTRATION = 1
+    LOGIN = 2
+  }
+
+  enum ActionUserMenu {
+    LOG_OUT = 0
+    SHOW_MY_CHATS = 1
+    CREATE_PRIVATE_CHAT = 2
+    OPEN_PRIVATE_CHAT = 3
+    OPEN_GENERAL_CHAT = 4
+    SHOW_ALL_USERS = 5
+  }
+}
+
+package "Network" {
+  class TcpSocket {
+    +TcpSocket()
+    +TcpSocket(fd)
+    +~TcpSocket()
+    +TcpSocket(other&&)
+    +operator=(other&&) : TcpSocket&
+    +Connect(host, port)
+    +SendLine(line) : bool
+    +RecvLine(line) : bool
+    +Close()
+    +IsValid() : bool
+    -EnsureCreated()
+    -m_fd : intptr_t
+  }
+}
+
+package "Shared model" {
+  class Message <<struct>> {
+    +Name : string
+    +Text : string
+  }
+}
+
+User --> ChatConsole : menu and chat input
+ClientMain ..> ChatClient : creates with host and port
+ClientMain ..> ChatConsole : creates and runs
+ChatConsole o-- ChatClient : uses
+ChatConsole ..> ActionMainMenu
+ChatConsole ..> ActionUserMenu
+ChatClient *-- TcpSocket : owns connection
+ChatClient ..> Message : creates from response
+TcpSocket --> "chat_server" : TCP line protocol
+
+note right of ChatClient
+  Request format:
+  COMMAND<TAB>ARG1<TAB>ARG2\n
+
+  Response format:
+  OK<TAB>DATA...
+  ERR<TAB>DESCRIPTION
+end note
+
+note bottom of TcpSocket
+  The client keeps one TCP connection
+  for the lifetime of ChatClient.
+end note
+
+@enduml
+
+@startuml console_chat_client_request
+title console_chat - client request flow
+
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam wrapWidth 220
+
+actor "Console user" as User
+participant "ChatConsole" as Console
+participant "ChatClient" as Client
+participant "TcpSocket" as Socket
+participant "chat_server" as Server
+
+User -> Console : select action and enter data
+Console -> Client : call public API method
+Client -> Client : build command parts
+Client -> Client : Join(parts, TAB)
+Client -> Socket : SendLine(payload)
+Socket -> Server : TCP request line
+Server --> Socket : TCP response line
+Client -> Socket : RecvLine(response)
+Client -> Client : Split(response, TAB)
+
+alt response starts with OK
+  Client --> Console : result or response data
+  Console --> User : show updated view
+else response starts with ERR
+  Client --> Console : false or empty result
+  Console --> User : show operation failure
+end
+
+@enduml
