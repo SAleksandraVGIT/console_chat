@@ -1,0 +1,8 @@
+# MySQL server connection used by MySQLManager.
+host=127.0.0.1
+port=3306
+user=console_chat
+password=
+database=console_chat
+connect_timeout_seconds=5
+charset=utf8mb4

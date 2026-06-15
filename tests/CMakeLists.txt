@@ -23,6 +23,7 @@ include(GoogleTest)
 add_executable(console_chat_unit_tests
   unit/base_chat.cpp
   unit/chat_service.cpp
+  unit/mysql_manager.cpp
   unit/password_protector.cpp
   unit/private_chat.cpp
   unit/user.cpp
@@ -63,6 +64,24 @@ target_link_libraries(console_chat_integration_tests
 # Регистрирует интеграционные тесты в CTest отдельной меткой.
 gtest_discover_tests(console_chat_integration_tests
   PROPERTIES LABELS integration
+)
+
+# Создает отдельный интеграционный тест для реального тестового экземпляра MySQL.
+add_executable(console_chat_mysql_integration_tests
+  integration/mysql_manager_integration.cpp
+)
+
+# Подключает код менеджера, модели и GoogleTest к MySQL-интеграционному тесту.
+target_link_libraries(console_chat_mysql_integration_tests
+  PRIVATE
+    chat_core
+    GTest::gtest_main
+)
+
+# Регистрирует тест; без CONSOLE_CHAT_MYSQL_TEST_CONFIG он будет пропущен.
+gtest_discover_tests(console_chat_mysql_integration_tests
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  PROPERTIES LABELS mysql
 )
 
 # Создает исполняемый файл с end-to-end тестами через реальные TCP-сокеты.

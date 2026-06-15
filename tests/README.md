@@ -60,6 +60,21 @@ ctest --test-dir build -L e2e --output-on-failure
 | `ChatServiceState.SaveLoad` | Сохранение и загрузка пользователей, чатов и сообщений. |
 | `ChatServiceState.InvalidLoad` | Неудачная загрузка не ломает текущее состояние сервиса. |
 
+### MySQLManager
+
+| Тест | Что проверяет |
+| --- | --- |
+| `MySQLManager.HasApplicationDefaults` | Конфигурация содержит стандартные host, port, user, database, timeout и charset. |
+| `MySQLManager.RejectsInvalidConfiguration` | Инициализация отклоняет некорректную конфигурацию до открытия соединения. |
+| `MySQLManager.RejectsOperationsBeforeInitialization` | SQL-операции отклоняются до успешного подключения. |
+| `MySQLConfig.LoadsFromFile` | Все параметры подключения загружаются из локального файла `key=value`. |
+| `MySQLConfig.RejectsUnknownKey` | Неизвестный параметр конфигурации отклоняется с понятной ошибкой. |
+
+Интеграционный тест `MySQLManagerIntegration.ConnectsUsingConfig` безопасно проверяет только
+подключение. Тест `MySQLManagerIntegration.PersistsAndLoadsServiceState` проверяет реальную
+запись и загрузку пользователей, чатов и сообщений. Оба требуют переменную
+`CONSOLE_CHAT_MYSQL_TEST_CONFIG`, а второй очищает указанную тестовую базу через `Reset()`.
+
 ### PasswordProtector
 
 | Тест | Что проверяет |

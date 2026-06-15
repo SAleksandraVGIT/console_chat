@@ -98,6 +98,8 @@ package "Storage" {
   }
 
   class FileManager
+  class MySQLConfig
+  class MySQLManager <<implemented>>
 }
 
 package "Network" {
@@ -113,6 +115,8 @@ package "Network" {
 file "users.db / chats.db" as StateFiles
 
 ServerMain ..> ChatService : creates shared instance
+ServerMain ..> FileManager : --storage file
+ServerMain ..> MySQLManager : --storage mysql
 ServerMain ..> TcpSocket : listen and accept
 ServerMain ..> Session : detached thread per client
 Session ..> TcpSocket : receive and send lines
@@ -121,6 +125,8 @@ Session ..> RequestRouter : route request under mutex
 RequestRouter ..> ChatService : execute command
 ChatService --> IManager : load and persist mutations
 IManager <|.. FileManager
+IManager <|.. MySQLManager
+MySQLManager --> MySQLConfig
 FileManager --> StateFiles
 
 ChatService *-- "0..*" User : m_users
