@@ -64,6 +64,13 @@ note right of Session
   A shared mutex protects ChatService.
 end note
 
+note right of Storage
+  Server selects FileManager or MySQLManager
+  with --storage file|mysql.
+  MySQLManager implements loading,
+  point writes, and reset operations.
+end note
+
 @enduml
 
 @startuml console_chat_end_to_end

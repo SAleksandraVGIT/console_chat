@@ -14,7 +14,7 @@
 
 ## 1. Список участников команды
 - [@SAleksandraVGIT](https://github.com/SAleksandraVGIT) (реализация)
-- [@Hillontrop](https://github.com/Hillontrop) (сборка под Linux и Windows)
+- [@Hillontrop](https://github.com/Hillontrop) (сборка под Linux и Windows, написание скриптов)
 
 ## 2. Описание
 
@@ -33,6 +33,7 @@
 ### Linux (Ubuntu)
 
 - CMake >= 3.16
+- MySQL client library и заголовочные файлы (`default-libmysqlclient-dev` в Ubuntu)
 - Компилятор с поддержкой C++20:
   - g++ 10+
   - или clang++ 12+
@@ -42,6 +43,81 @@
 - CMake >= 3.16
 - MinGW (g++ с поддержкой C++20)
 - MinGW добавлен в PATH
+- MySQL Connector/C или совместимая клиентская библиотека, доступная для CMake
+
+### Подготовка MySQL
+
+Рекомендуемый способ настройки — bash-скрипт [`scripts/setup_mysql.sh`](scripts/setup_mysql.sh).
+Он создаёт базу, технического пользователя, таблицы и локальный файл `config/mysql.conf`:
+
+```bash
+# Создать базу и пользователя с именами по умолчанию
+./scripts/setup_mysql.sh
+
+# Ubuntu: войти в локальный MySQL через системную авторизацию root
+./scripts/setup_mysql.sh --sudo
+
+# Создать базу и пользователя с указанными именами
+./scripts/setup_mysql.sh --database my_chat --user my_chat_app
+```
+
+Пароль технического пользователя скрипт запрашивает без отображения в терминале. Передавать
+его аргументом командной строки не следует: такой аргумент сохраняется в истории shell и может
+быть виден другим процессам. Для автоматического запуска пароль можно заранее поместить в
+переменную окружения `MYSQL_APP_PASSWORD`.
+
+При обычном запуске после нового пароля технического пользователя клиент `mysql` запрашивает
+существующий пароль администратора MySQL `root`. На Ubuntu `root` часто использует системную
+авторизацию и не принимает пароль; в этом случае запускайте скрипт с `--sudo`. Тогда вместо
+пароля MySQL может быть запрошен пароль текущего пользователя Linux для команды `sudo`.
+
+Созданный `config/mysql.conf` содержит пароль, имеет права `600` и добавлен в `.gitignore`.
+Безопасный шаблон без пароля находится в
+[`config/mysql.conf.example`](config/mysql.conf.example).
+
+Загрузка конфигурации для будущего включения `MySQLManager` выглядит так:
+
+```cpp
+console_chat::storage::MySQLConfig config;
+std::string error;
+
+if (!console_chat::storage::LoadMySQLConfig(
+        "config/mysql.conf", config, error)) {
+    throw std::runtime_error(error);
+}
+
+console_chat::storage::MySQLManager manager(std::move(config));
+```
+
+Сервер выбирает реализацию `IManager` через параметр `--storage`: файловый `FileManager`
+используется по умолчанию, а `MySQLManager` включается значением `mysql`.
+
+Реальный интеграционный тест MySQL очищает указанную базу, поэтому запускайте его только
+на отдельной тестовой базе:
+
+```bash
+# Безопасно проверить только подключение к MySQL
+CONSOLE_CHAT_MYSQL_TEST_CONFIG=config/mysql.conf \
+    ./build/tests/console_chat_mysql_integration_tests \
+    --gtest_filter=MySQLManagerIntegration.ConnectsUsingConfig
+
+# Запустить MySQL-интеграционный тест с отдельной тестовой конфигурацией
+CONSOLE_CHAT_MYSQL_TEST_CONFIG=config/mysql.test.conf \
+    ctest --test-dir build -L mysql --output-on-failure
+```
+
+Без `CONSOLE_CHAT_MYSQL_TEST_CONFIG` этот тест автоматически пропускается.
+Относительный путь к конфигурации разрешается от корня проекта.
+
+Для создания только стандартной базы и таблиц без конфигурационного файла можно выполнить:
+
+```bash
+# Создать стандартную базу console_chat и её таблицы
+mysql -u root -p < database/setup.sql
+```
+
+`CREATE TABLE IF NOT EXISTS` позволяет повторно запускать скрипт, но не обновляет структуру
+уже существующих таблиц. Последующие изменения схемы следует оформлять отдельными миграциями.
 
 ## 4. Сборка и тесты
 
@@ -96,7 +172,14 @@ ctest --test-dir build --output-on-failure
 1. Запустите сервер в первом терминале:
 
 ```bash
+# Запустить сервер с файловым хранилищем по умолчанию
 ./build/chat_server
+
+# Запустить сервер с MySQL и конфигурацией по умолчанию
+./build/chat_server --storage mysql
+
+# Запустить сервер с MySQL и указанным файлом конфигурации
+./build/chat_server --storage mysql --mysql-config config/mysql.conf
 ```
 
 2. Запустите клиент(ы) во втором и третьем терминалах:
@@ -109,16 +192,27 @@ ctest --test-dir build --output-on-failure
 - сервер: `./build/chat_server --port 7777`
 - клиент: `./build/console_chat --host 127.0.0.1 --port 7777`
 - допустимый диапазон порта: `1024..49151`
+- выбор хранилища: `./build/chat_server --storage file|mysql`
+- хранилище по умолчанию: `file`
 - файлы состояния сервера по умолчанию: `data/users.db`, `data/chats.db`
 - запуск сервера без подгрузки истории: `./build/chat_server --reset-state`
 - пользовательские файлы состояния: `./build/chat_server --users-file data/users.db --chats-file data/chats.db`
+- конфигурация MySQL: `./build/chat_server --storage mysql --mysql-config config/mysql.conf`
+
+В режиме MySQL параметр `--reset-state` удаляет все сообщения, чаты и пользователей из
+выбранной базы. Без этого параметра сервер только загружает сохранённое состояние и создаёт
+общий чат `GENERAL`, если его ещё нет.
 
 ### Windows (PowerShell)
 
 1. Запустите сервер:
 
 ```powershell
+# Запустить сервер с файловым хранилищем по умолчанию
 .\build\chat_server.exe
+
+# Запустить сервер с MySQL
+.\build\chat_server.exe --storage mysql --mysql-config config\mysql.conf
 ```
 
 2. Запустите один или несколько клиентов:
@@ -131,9 +225,12 @@ ctest --test-dir build --output-on-failure
 - сервер: `.\build\chat_server.exe --port 7777`
 - клиент: `.\build\console_chat.exe --host 127.0.0.1 --port 7777`
 - допустимый диапазон порта: `1024..49151`
+- выбор хранилища: `.\build\chat_server.exe --storage file|mysql`
+- хранилище по умолчанию: `file`
 - файлы состояния сервера по умолчанию: `data/users.db`, `data/chats.db`
 - запуск сервера без подгрузки истории: `.\build\chat_server.exe --reset-state`
 - пользовательские файлы состояния: `.\build\chat_server.exe --users-file data/users.db --chats-file data/chats.db`
+- конфигурация MySQL: `.\build\chat_server.exe --storage mysql --mysql-config config\mysql.conf`
 
 ## 6. Структура проекта
 
@@ -145,12 +242,19 @@ ctest --test-dir build --output-on-failure
 - `src/client/` — клиентская реализация и точка входа клиента
 - `src/server/` — серверная точка входа и серверные обработчики протокола
 - `src/network/` — реализация сокетного слоя
-- `src/storage/` — файловый менеджер хранения
+- `src/storage/` — реализации менеджеров хранения и внутренние SQL-запросы MySQL
+- `database/` — SQL-скрипты создания базы данных и таблиц
+- `config/` — шаблон конфигурации подключения к MySQL
+- `scripts/` — скрипты настройки окружения проекта
 - `CMakeLists.txt` — конфигурация сборки
 
-Хранилище подключается через интерфейс `IManager`. Текущий `FileManager` реализует
-точечные операции добавления пользователя, чата и сообщения. Будущая реализация для
-MySQL сможет заменить их отдельными SQL-запросами без изменений роутера и сетевых сессий.
+Хранилище подключается через интерфейс `IManager`. `FileManager` и `MySQLManager` реализуют
+одинаковые операции загрузки, добавления пользователя, чата, сообщения и очистки состояния.
+MySQL-реализация использует prepared statements и транзакцию при регистрации пользователя,
+не требуя изменений роутера, сетевых сессий и бизнес-логики `ChatService`.
+Выбор реализации выполняется сервером через `--storage file|mysql`.
+Конфигурация по умолчанию использует `127.0.0.1:3306`, пользователя и базу
+`console_chat`, timeout `std::chrono::seconds{5}` и кодировку `utf8mb4`. Пароль необходимо задать отдельно.
 
 ## 7. Диаграммы проекта
 
@@ -164,7 +268,8 @@ MySQL сможет заменить их отдельными SQL-запроса
 - Для VS Code:
   - задачи из `.vscode/tasks.json` уже учитывают ОС (Linux/Windows);
   - в `.vscode/c_cpp_properties.json` есть отдельные конфигурации `Linux` и `MinGW`;
-  - при необходимости поправьте путь `compilerPath` в конфигурации `MinGW` под ваш локальный путь к `g++.exe`.
+  - при необходимости поправьте путь `compilerPath` в конфигурации `MinGW` под ваш локальный путь к `g++.exe`;
+  - для MinGW задайте переменную окружения `MYSQL_INCLUDE_DIR`, указывающую на каталог с `mysql.h`.
 
 - Если хотите запускать одной строкой в PowerShell, используйте `;` вместо `&&`:
 
