@@ -52,6 +52,7 @@ ctest --test-dir build -L e2e --output-on-failure
 | `ChatService.SortedLogins` | Список логинов возвращается в отсортированном виде. |
 | `ChatService.GeneralChat` | Зарегистрированный пользователь видит чат `GENERAL`. |
 | `ChatService.GeneralMessages` | Отправка и чтение сообщений в общем чате, а также базовые ошибки отправки. |
+| `ChatService.LogsSuccessfulMessages` | Успешно отправленное сообщение записывается в файл логов через `Logger`. |
 | `ChatService.MessageLimit` | Сообщение длиной `256` символов принимается, `257` символов отклоняется. |
 | `ChatService.PrivateChat` | Создание приватного чата и запрет некорректных вариантов. |
 | `ChatService.PrivateAccess` | Только участники приватного чата могут писать и читать его сообщения. |
@@ -74,6 +75,13 @@ ctest --test-dir build -L e2e --output-on-failure
 подключение. Тест `MySQLManagerIntegration.PersistsAndLoadsServiceState` проверяет реальную
 запись и загрузку пользователей, чатов и сообщений. Оба требуют переменную
 `CONSOLE_CHAT_MYSQL_TEST_CONFIG`, а второй очищает указанную тестовую базу через `Reset()`.
+
+### Logger
+
+| Тест | Что проверяет |
+| --- | --- |
+| `Logger.WritesAndReadsLines` | Логгер записывает строки в файл и читает их обратно по одной. |
+| `Logger.AllowsConcurrentWrites` | Несколько потоков могут одновременно писать в один файл логов без потери строк. |
 
 ### PasswordProtector
 

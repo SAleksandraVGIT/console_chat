@@ -23,6 +23,7 @@ include(GoogleTest)
 add_executable(console_chat_unit_tests
   unit/base_chat.cpp
   unit/chat_service.cpp
+  unit/logger.cpp
   unit/mysql_manager.cpp
   unit/password_protector.cpp
   unit/private_chat.cpp

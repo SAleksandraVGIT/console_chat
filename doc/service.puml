@@ -31,6 +31,7 @@ package "Core service" {
     +ChatService()
     +ChatService(storageManager)
     +Initialize() : bool
+    +SetLogger(logger) : void
     +Register(name, login, password) : bool
     +Authenticate(login, password) : bool
     +GetUserNameByLogin(login) : string
@@ -45,6 +46,7 @@ package "Core service" {
     -m_users : unordered_map<string, unique_ptr<User>>
     -m_chats : unordered_map<string, unique_ptr<BaseChat>>
     -m_storageManager : IManager*
+    -m_logger : Logger*
   }
 
   class User {
@@ -102,6 +104,13 @@ package "Storage" {
   class MySQLManager <<implemented>>
 }
 
+package "Logging" {
+  class Logger {
+    +WriteLine(line) : bool
+    +ReadLine(line) : bool
+  }
+}
+
 package "Network" {
   class TcpSocket {
     +BindAndListen(port, backlog)
@@ -117,6 +126,7 @@ file "users.db / chats.db" as StateFiles
 ServerMain ..> ChatService : creates shared instance
 ServerMain ..> FileManager : --storage file
 ServerMain ..> MySQLManager : --storage mysql
+ServerMain ..> Logger : --log-file
 ServerMain ..> TcpSocket : listen and accept
 ServerMain ..> Session : detached thread per client
 Session ..> TcpSocket : receive and send lines
@@ -124,6 +134,7 @@ Session ..> Protocol : Split / Join
 Session ..> RequestRouter : route request under mutex
 RequestRouter ..> ChatService : execute command
 ChatService --> IManager : load and persist mutations
+ChatService ..> Logger : optional message logging
 IManager <|.. FileManager
 IManager <|.. MySQLManager
 MySQLManager --> MySQLConfig

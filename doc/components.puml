@@ -71,6 +71,13 @@ note right of Storage
   point writes, and reset operations.
 end note
 
+note right of Service
+  Successful messages are optionally
+  written to Logger.
+  Without Logger, ChatService behavior
+  stays unchanged.
+end note
+
 @enduml
 
 @startuml console_chat_end_to_end

@@ -1,4 +1,5 @@
 #include "console_chat/core/chat_service.h"
+#include "console_chat/logging/logger.h"
 #include "console_chat/network/tcp_socket.h"
 #include "console_chat/storage/file_manager.h"
 #include "console_chat/storage/mysql_manager.h"
@@ -8,6 +9,7 @@
 #include <iostream>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -42,7 +44,7 @@ void PrintUsage() {
     std::cout
         << "Usage: chat_server [--port <number>] [--storage <file|mysql>] "
            "[--users-file <path>] [--chats-file <path>] "
-           "[--mysql-config <path>] [--reset-state]\n";
+           "[--mysql-config <path>] [--log-file <path>] [--reset-state]\n";
 }
 
 } // namespace
@@ -54,6 +56,7 @@ int RunServer(int argc, char* argv[]) {
     std::string usersFilePath = DEFAULT_USERS_FILE;
     std::string chatsFilePath = DEFAULT_CHATS_FILE;
     std::string mysqlConfigPath = DEFAULT_MYSQL_CONFIG;
+    std::optional<std::string> logFilePath;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -75,6 +78,10 @@ int RunServer(int argc, char* argv[]) {
         }
         if (arg == "--mysql-config" && i + 1 < argc) {
             mysqlConfigPath = argv[++i];
+            continue;
+        }
+        if (arg == "--log-file" && i + 1 < argc) {
+            logFilePath = std::string(argv[++i]);
             continue;
         }
         if (arg == "--reset-state") {
@@ -122,7 +129,15 @@ int RunServer(int argc, char* argv[]) {
         std::cout << "State reset requested. Starting with empty state.\n";
     }
 
+    std::unique_ptr<console_chat::logging::Logger> logger;
+    if (logFilePath) {
+        logger = std::make_unique<console_chat::logging::Logger>(*logFilePath);
+    }
+
     console_chat::core::ChatService service(*storageManager);
+    if (logger) {
+        service.SetLogger(*logger);
+    }
     if (!service.Initialize()) {
         if (storageType == StorageType::File && !resetState &&
             storageManager->Reset() && service.Initialize())
@@ -142,6 +157,11 @@ int RunServer(int argc, char* argv[]) {
 
     std::cout << "Storage backend: "
               << (storageType == StorageType::File ? "file" : "mysql") << "\n";
+    if (logFilePath) {
+        std::cout << "Message logging: " << *logFilePath << "\n";
+    } else {
+        std::cout << "Message logging: disabled\n";
+    }
 
     console_chat::network::TcpSocket serverSock;
     serverSock.BindAndListen(static_cast<uint16_t>(port), BACKLOG);
