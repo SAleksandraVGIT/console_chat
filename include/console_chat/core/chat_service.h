@@ -11,6 +11,10 @@
 #include <vector>
 
 
+namespace console_chat::logging {
+class Logger;
+}
+
 namespace console_chat::core {
 
 inline constexpr const char* GENERAL_CHAT_NAME = "GENERAL";
@@ -24,6 +28,7 @@ public:
     explicit ChatService(storage::IManager& storageManager);
 
     bool Initialize();
+    void SetLogger(logging::Logger& logger);
 
     bool Register(std::string&& name, std::string&& login, std::string&& password);
     bool Authenticate(const std::string& login, const std::string& password);
@@ -54,6 +59,7 @@ private:
     std::unordered_map<std::string, std::unique_ptr<User>> m_users;
     std::unordered_map<std::string, std::unique_ptr<BaseChat>> m_chats;
     storage::IManager* m_storageManager = nullptr;
+    logging::Logger* m_logger = nullptr;
 };
 
 } // namespace console_chat::core

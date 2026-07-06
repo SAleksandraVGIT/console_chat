@@ -175,6 +175,9 @@ ctest --test-dir build --output-on-failure
 # Запустить сервер с файловым хранилищем по умолчанию
 ./build/chat_server
 
+# Запустить сервер и включить запись сообщений в файл логов
+./build/chat_server --log-file log.txt
+
 # Запустить сервер с MySQL и конфигурацией по умолчанию
 ./build/chat_server --storage mysql
 
@@ -195,6 +198,8 @@ ctest --test-dir build --output-on-failure
 - выбор хранилища: `./build/chat_server --storage file|mysql`
 - хранилище по умолчанию: `file`
 - файлы состояния сервера по умолчанию: `data/users.db`, `data/chats.db`
+- логирование сообщений выключено по умолчанию
+- включение логов сообщений: `./build/chat_server --log-file logs/chat.log`
 - запуск сервера без подгрузки истории: `./build/chat_server --reset-state`
 - пользовательские файлы состояния: `./build/chat_server --users-file data/users.db --chats-file data/chats.db`
 - конфигурация MySQL: `./build/chat_server --storage mysql --mysql-config config/mysql.conf`
@@ -210,6 +215,9 @@ ctest --test-dir build --output-on-failure
 ```powershell
 # Запустить сервер с файловым хранилищем по умолчанию
 .\build\chat_server.exe
+
+# Запустить сервер и включить запись сообщений в файл логов
+.\build\chat_server.exe --log-file log.txt
 
 # Запустить сервер с MySQL
 .\build\chat_server.exe --storage mysql --mysql-config config\mysql.conf
@@ -228,6 +236,8 @@ ctest --test-dir build --output-on-failure
 - выбор хранилища: `.\build\chat_server.exe --storage file|mysql`
 - хранилище по умолчанию: `file`
 - файлы состояния сервера по умолчанию: `data/users.db`, `data/chats.db`
+- логирование сообщений выключено по умолчанию
+- включение логов сообщений: `.\build\chat_server.exe --log-file logs\chat.log`
 - запуск сервера без подгрузки истории: `.\build\chat_server.exe --reset-state`
 - пользовательские файлы состояния: `.\build\chat_server.exe --users-file data/users.db --chats-file data/chats.db`
 - конфигурация MySQL: `.\build\chat_server.exe --storage mysql --mysql-config config\mysql.conf`
@@ -238,11 +248,13 @@ ctest --test-dir build --output-on-failure
 - `include/console_chat/client/` — клиентский API и консольный интерфейс
 - `include/console_chat/network/` — TCP-сокет обёртка
 - `include/console_chat/storage/` — интерфейс и реализации постоянного хранилища
+- `include/console_chat/logging/` — потокобезопасный файловый логгер
 - `src/core/` — реализации доменной логики
 - `src/client/` — клиентская реализация и точка входа клиента
 - `src/server/` — серверная точка входа и серверные обработчики протокола
 - `src/network/` — реализация сокетного слоя
 - `src/storage/` — реализации менеджеров хранения и внутренние SQL-запросы MySQL
+- `src/logging/` — реализация логгера сообщений
 - `database/` — SQL-скрипты создания базы данных и таблиц
 - `config/` — шаблон конфигурации подключения к MySQL
 - `scripts/` — скрипты настройки окружения проекта
@@ -253,6 +265,8 @@ ctest --test-dir build --output-on-failure
 MySQL-реализация использует prepared statements и транзакцию при регистрации пользователя,
 не требуя изменений роутера, сетевых сессий и бизнес-логики `ChatService`.
 Выбор реализации выполняется сервером через `--storage file|mysql`.
+Сообщения, успешно отправленные в общий или приватный чат, записываются через `Logger`
+только при запуске сервера с параметром `--log-file`.
 Конфигурация по умолчанию использует `127.0.0.1:3306`, пользователя и базу
 `console_chat`, timeout `std::chrono::seconds{5}` и кодировку `utf8mb4`. Пароль необходимо задать отдельно.
 

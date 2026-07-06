@@ -45,6 +45,7 @@ set(CHAT_CORE_SOURCES
   src/core/private_chat.cpp
   src/core/password_protector.cpp
   src/core/chat_service.cpp
+  src/logging/logger.cpp
   src/storage/file_manager.cpp
   src/storage/mysql_queries.h
   src/storage/mysql_manager.cpp

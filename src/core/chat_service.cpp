@@ -1,12 +1,26 @@
 #include "console_chat/core/chat_service.h"
 #include "console_chat/core/password_protector.h"
 #include "console_chat/core/private_chat.h"
+#include "console_chat/logging/logger.h"
 
 #include <algorithm>
 
 namespace console_chat::core {
 
 constexpr size_t MAX_CHATS_ON_SERVER = 991;
+
+namespace {
+
+std::string ToLogField(std::string value) {
+    for (char& ch : value) {
+        if (ch == '\n' || ch == '\r' || ch == '\t') {
+            ch = ' ';
+        }
+    }
+    return value;
+}
+
+} // namespace
 
 ChatService::ChatService() {
     m_chats.try_emplace(GENERAL_CHAT_NAME, std::make_unique<BaseChat>());
@@ -48,6 +62,10 @@ bool ChatService::Initialize() {
     }
 
     return true;
+}
+
+void ChatService::SetLogger(logging::Logger& logger) {
+    m_logger = &logger;
 }
 
 bool ChatService::Register(
@@ -246,7 +264,21 @@ bool ChatService::SendMessage(const std::string& currentLogin, const std::string
         return false;
     }
 
-    return chat->AddMessage(std::move(message));
+    const std::string logLine =
+        "chat=\"" + ToLogField(chatName) +
+        "\" sender=\"" + ToLogField(currentLogin) +
+        "\" name=\"" + ToLogField(message.Name) +
+        "\" text=\"" + ToLogField(message.Text) + "\"";
+
+    if (!chat->AddMessage(std::move(message))) {
+        return false;
+    }
+
+    if (m_logger) {
+        m_logger->WriteLine(logLine);
+    }
+
+    return true;
 }
 
 User* ChatService::FindUser(const std::string& login) const {

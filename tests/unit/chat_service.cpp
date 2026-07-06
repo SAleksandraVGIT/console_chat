@@ -1,4 +1,5 @@
 #include "console_chat/core/chat_service.h"
+#include "console_chat/logging/logger.h"
 #include "console_chat/storage/file_manager.h"
 
 #include <gtest/gtest.h>
@@ -169,6 +170,24 @@ TEST(ChatService, GeneralMessages) {
     ASSERT_EQ(messages.size(), 1u);
     EXPECT_EQ(messages[0].Name, "User_1");
     EXPECT_EQ(messages[0].Text, "Hello everyone");
+}
+
+TEST(ChatService, LogsSuccessfulMessages) {
+    const auto logFile = MakeTempPath("messages.log");
+    ChatService service;
+    console_chat::logging::Logger logger(logFile.string());
+    service.SetLogger(logger);
+
+    ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
+    ASSERT_TRUE(service.SendMessage("user_1", GENERAL_CHAT_NAME, "Hello log"));
+
+    std::string line;
+    ASSERT_TRUE(logger.ReadLine(line));
+    EXPECT_EQ(line, "chat=\"GENERAL\" sender=\"user_1\" name=\"User_1\" text=\"Hello log\"");
+    EXPECT_FALSE(logger.ReadLine(line));
+
+    std::error_code ec;
+    fs::remove(logFile, ec);
 }
 
 TEST(ChatService, MessageLimit) {
