@@ -18,6 +18,7 @@ int main(int argc, char* argv[]) {
     try {
         std::string host = DEFAULT_HOST;
         int port = DEFAULT_PORT;
+        bool adminMode = false;
 
         for (int i = 1; i < argc; ++i) {
             const std::string arg = argv[i];
@@ -29,8 +30,12 @@ int main(int argc, char* argv[]) {
                 port = std::stoi(argv[++i]);
                 continue;
             }
+            if (arg == "--admin") {
+                adminMode = true;
+                continue;
+            }
             if (arg == "--help") {
-                std::cout << "Usage: console_chat [--host <ip>] [--port <number>]\n";
+                std::cout << "Usage: console_chat [--host <ip>] [--port <number>] [--admin]\n";
                 return 0;
             }
 
@@ -43,7 +48,7 @@ int main(int argc, char* argv[]) {
 
         console_chat::client::ChatClient client(host, port);
         console_chat::client::ChatConsole console(client);
-        return console.Run();
+        return adminMode ? console.RunAdmin() : console.Run();
     } catch (const std::exception& ex) {
         std::cerr << "Fatal error: " << ex.what() << std::endl;
         return 1;

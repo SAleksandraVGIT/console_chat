@@ -3,6 +3,8 @@
 #include "console_chat/storage/file_manager.h"
 #include "console_chat/storage/mysql_manager.h"
 
+#include "admin_config.h"
+#include "server_config.h"
 #include "session.h"
 
 #include <iostream>
@@ -22,6 +24,8 @@ constexpr int MAX_PORT = 49151;
 constexpr const char* DEFAULT_USERS_FILE = "data/users.db";
 constexpr const char* DEFAULT_CHATS_FILE = "data/chats.db";
 constexpr const char* DEFAULT_MYSQL_CONFIG = "config/mysql.conf";
+constexpr const char* DEFAULT_ADMIN_CONFIG = "config/admin.conf";
+constexpr const char* DEFAULT_SERVER_CONFIG = "config/server.conf";
 
 enum class StorageType {
     File,
@@ -42,7 +46,8 @@ void PrintUsage() {
     std::cout
         << "Usage: chat_server [--port <number>] [--storage <file|mysql>] "
            "[--users-file <path>] [--chats-file <path>] "
-           "[--mysql-config <path>] [--reset-state]\n";
+           "[--mysql-config <path>] [--admin-config <path>] "
+           "[--server-config <path>] [--reset-state]\n";
 }
 
 } // namespace
@@ -54,6 +59,8 @@ int RunServer(int argc, char* argv[]) {
     std::string usersFilePath = DEFAULT_USERS_FILE;
     std::string chatsFilePath = DEFAULT_CHATS_FILE;
     std::string mysqlConfigPath = DEFAULT_MYSQL_CONFIG;
+    std::string adminConfigPath = DEFAULT_ADMIN_CONFIG;
+    std::string serverConfigPath = DEFAULT_SERVER_CONFIG;
 
     for (int i = 1; i < argc; ++i) {
         const std::string arg = argv[i];
@@ -77,6 +84,14 @@ int RunServer(int argc, char* argv[]) {
             mysqlConfigPath = argv[++i];
             continue;
         }
+        if (arg == "--admin-config" && i + 1 < argc) {
+            adminConfigPath = argv[++i];
+            continue;
+        }
+        if (arg == "--server-config" && i + 1 < argc) {
+            serverConfigPath = argv[++i];
+            continue;
+        }
         if (arg == "--reset-state") {
             resetState = true;
             continue;
@@ -91,6 +106,20 @@ int RunServer(int argc, char* argv[]) {
 
     if (port < MIN_PORT || port > MAX_PORT) {
         throw std::runtime_error("Port must be in range 1024..49151.");
+    }
+
+    console_chat::server::ServerConfig serverConfig;
+    std::string serverConfigStatus;
+    if (!console_chat::server::LoadServerConfig(
+            serverConfigPath,
+            serverConfig,
+            serverConfigStatus))
+    {
+        throw std::runtime_error(serverConfigStatus);
+    }
+
+    if (!serverConfigStatus.empty()) {
+        std::cout << serverConfigStatus << ". Using default server limits.\n";
     }
 
     std::unique_ptr<console_chat::storage::IManager> storageManager;
@@ -122,7 +151,7 @@ int RunServer(int argc, char* argv[]) {
         std::cout << "State reset requested. Starting with empty state.\n";
     }
 
-    console_chat::core::ChatService service(*storageManager);
+    console_chat::core::ChatService service(*storageManager, serverConfig.Limits);
     if (!service.Initialize()) {
         if (storageType == StorageType::File && !resetState &&
             storageManager->Reset() && service.Initialize())
@@ -143,22 +172,48 @@ int RunServer(int argc, char* argv[]) {
     std::cout << "Storage backend: "
               << (storageType == StorageType::File ? "file" : "mysql") << "\n";
 
+    console_chat::server::AdminCredentials adminCredentials;
+    std::string adminConfigError;
+    if (!console_chat::server::LoadAdminCredentials(
+            adminConfigPath,
+            adminCredentials,
+            adminConfigError))
+    {
+        throw std::runtime_error(adminConfigError);
+    }
+
+    if (adminCredentials.Enabled) {
+        std::cout << "Admin login is enabled via " << adminConfigPath << "\n";
+    } else {
+        std::cout << adminConfigError << ". Admin login is disabled.\n";
+    }
+
     console_chat::network::TcpSocket serverSock;
     serverSock.BindAndListen(static_cast<uint16_t>(port), BACKLOG);
     std::cout << "Server is listening on port " << port << "\n";
 
     std::mutex serviceMutex;
+    console_chat::server::SessionRegistry sessionRegistry;
     while (true) {
         auto clientSock = serverSock.Accept();
         if (!clientSock.IsValid()) {
             continue;
         }
 
-        std::thread([client = std::move(clientSock), &service, &serviceMutex]() mutable {
+        std::thread([
+            client = std::move(clientSock),
+            &service,
+            &serviceMutex,
+            &adminCredentials,
+            &sessionRegistry,
+            clientIdleTimeout = serverConfig.ClientIdleTimeout]() mutable {
             console_chat::server::HandleClientSession(
                 std::move(client),
                 service,
-                serviceMutex);
+                serviceMutex,
+                adminCredentials,
+                &sessionRegistry,
+                clientIdleTimeout);
         }).detach();
     }
 }

@@ -1,0 +1,10 @@
+# 0 means unlimited.
+max_users=0
+
+# Client idle timeout. Use either minutes or seconds.
+client_timeout_minutes=15
+
+max_chats=991
+max_private_chats_per_user=45
+max_message_length=256
+max_messages_per_chat=1000

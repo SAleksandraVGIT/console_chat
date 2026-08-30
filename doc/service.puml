@@ -1,27 +1,56 @@
 @startuml console_chat_service
-allowmixing
+!pragma layout smetana
 title console_chat - server service and domain model
 
 skinparam classAttributeIconSize 0
 skinparam shadowing false
-skinparam linetype ortho
 skinparam wrapWidth 220
 
 package "Server application (chat_server)" {
-  class ServerMain <<entry point>> {
+  class ServerMain <<entry_point>> {
     +main(argc, argv) : int
   }
 
   class Session <<module>> {
-    +HandleClientSession(client, service, serviceMutex)
+    +HandleClientSession(client, service, serviceMutex, adminCredentials, sessionRegistry, clientIdleTimeout)
+  }
+
+  class SessionRegistry {
+    +Register(login, socket)
+    +Unregister(login, socket)
+    +KickUser(login) : bool
   }
 
   class RequestRouter <<module>> {
-    +HandleRequest(req, service, currentLogin) : vector<string>
+    +HandleRequest(req) : ResponseParts
+  }
+
+  class RequestContext <<struct>> {
+    +currentLogin : string
+    +isAdmin : bool
+  }
+
+  class AdminCredentials <<struct>> {
+    +Login : string
+    +Password : string
+    +Enabled : bool
+  }
+
+  class AdminConfig <<module>> {
+    +LoadAdminCredentials(filePath, credentials, error) : bool
+  }
+
+  class ServerConfigLoader <<module>> {
+    +LoadServerConfig(filePath, config, error) : bool
+  }
+
+  class ServerConfig <<struct>> {
+    +Limits : ServiceLimits
+    +ClientIdleTimeout : seconds
   }
 
   class Protocol <<module>> {
-    +Split(line, delim) : vector<string>
+    +Split(line, delim) : RequestParts
     +Join(parts, delim) : string
   }
 }
@@ -29,61 +58,114 @@ package "Server application (chat_server)" {
 package "Core service" {
   class ChatService {
     +ChatService()
+    +ChatService(limits)
     +ChatService(storageManager)
+    +ChatService(storageManager, limits)
     +Initialize() : bool
     +Register(name, login, password) : bool
     +Authenticate(login, password) : bool
     +GetUserNameByLogin(login) : string
-    +GetMyChats(currentLogin) : vector<string>
+    +GetMyChats(currentLogin) : ChatNames
     +CreatePrivateChat(currentLogin, recipientLogin, chatName) : bool
-    +GetMessages(currentLogin, chatName) : vector<Message>
+    +GetPrivateChatName(firstLogin, secondLogin) : string
+    +GetMessages(currentLogin, chatName) : Messages
     +SendMessage(currentLogin, chatName, text) : bool
-    +GetAllUserLogins() : vector<string>
+    +GetAllUserLogins() : UserLogins
+    +GetAllUsersInfo() : UserInfos
+    +GetUserInfo(login, info) : bool
+    +GetAllChatNames() : ChatNames
+    +GetAllChatsInfo() : ChatInfos
+    +GetMessagesForAdmin(chatName) : Messages
+    +SendAdminMessageToGeneral(text) : bool
+    +CreateAdminPrivateChat(recipientLogin, chatName) : bool
+    +SendAdminMessageToChat(chatName, text) : bool
+    +BanUser(login, period) : bool
+    +UnbanUser(login) : bool
+    +IsUserBanned(login) : bool
     +ImportState(state) : bool
-    -FindUser(login) : User*
-    -FindChat(name) : BaseChat*
-    -m_users : unordered_map<string, unique_ptr<User>>
-    -m_chats : unordered_map<string, unique_ptr<BaseChat>>
-    -m_storageManager : IManager*
+    -FindUser(login) : UserPtr
+    -FindChat(name) : BaseChatPtr
+    -m_users : UserMap
+    -m_chats : ChatMap
+    -m_storageManager : IManagerPtr
+    -m_limits : ServiceLimits
+  }
+
+  class ServiceLimits <<struct>> {
+    +MaxUsers : size_t
+    +MaxChats : size_t
+    +MaxPrivateChatsPerUser : size_t
+    +MaxMessageLength : size_t
+    +MaxMessagesPerChat : size_t
   }
 
   class User {
-    +User(name, passwordHash)
-    +GetName() : const string&
+    +User(name, passwordHash, bannedUntilEpoch, bannedForever)
+    +GetName() : string
     +CheckPassword(password) : bool
-    +GetPasswordHash() : const string&
+    +GetPasswordHash() : string
+    +GetBannedUntilEpoch() : int64_t
+    +IsBannedForever() : bool
+    +IsBannedAt(nowEpoch) : bool
+    +SetBan(bannedUntilEpoch, bannedForever)
     -m_name : string
     -m_passwordHash : string
+    -m_bannedUntilEpoch : int64_t
+    -m_bannedForever : bool
+  }
+
+  enum BanPeriod {
+    OneDay
+    TenDays
+    Month
+    Year
+    Forever
   }
 
   class PasswordProtector {
-    +{static} Hash(password) : string
-    +{static} Verify(password, expectedHash) : bool
-    +{static} IsHash(value) : bool
-    -{static} HASH_PREFIX : string_view = "h1$"
+    {static} +Hash(password) : string
+    {static} +Verify(password, expectedHash) : bool
+    {static} +IsHash(value) : bool
+    {static} -HASH_PREFIX : string_view
   }
 
   class BaseChat {
+    +BaseChat(maxMessages)
     +~BaseChat()
     +IsParticipant(login) : bool
     +IsPrivate() : bool
-    +GetMessages() : const vector<Message>&
+    +GetMessages() : Messages
     +AddMessage(message) : bool
-    #m_messages : vector<Message>
+    #m_messages : Messages
+    -m_maxMessages : size_t
   }
 
   class PrivateChat {
-    +PrivateChat(user1, user2)
+    +PrivateChat(user1, user2, maxMessages)
     +IsParticipant(login) : bool
     +IsPrivate() : bool
     +HasUser(login) : bool
-    +GetUsers() : const array<string, 2>&
-    -m_users : array<string, 2>
+    +GetUsers() : TwoUserLogins
+    -m_users : TwoUserLogins
   }
 
   class Message <<struct>> {
     +Name : string
     +Text : string
+  }
+
+  class UserInfo <<struct>> {
+    +Login : string
+    +Name : string
+    +BannedUntilEpoch : int64_t
+    +BannedForever : bool
+    +BannedNow : bool
+  }
+
+  class ChatInfo <<struct>> {
+    +Name : string
+    +IsPrivate : bool
+    +Participants : TwoUserLogins
   }
 }
 
@@ -93,7 +175,10 @@ package "Storage" {
     +Load(state) : bool
     +AddUser(user) : bool
     +AddChat(chat) : bool
-    +AddMessage(chatName, senderLogin, message) : bool
+    +AddMessage(chatName, senderLogin, message, maxMessagesPerChat) : bool
+    +AddAdminMessage(chatName, message, maxMessagesPerChat) : bool
+    +UpdateUserBan(login, bannedUntilEpoch, bannedForever) : bool
+    +DeletePrivateChatsWithUser(login) : bool
     +Reset() : bool
   }
 
@@ -108,20 +193,33 @@ package "Network" {
     +Accept() : TcpSocket
     +SendLine(line) : bool
     +RecvLine(line) : bool
+    +SetReceiveTimeout(timeout) : bool
+    +WasLastReceiveTimedOut() : bool
     +IsValid() : bool
   }
 }
 
-file "users.db / chats.db" as StateFiles
+class "users.db / chats.db" as StateFiles <<storage>>
 
 ServerMain ..> ChatService : creates shared instance
 ServerMain ..> FileManager : --storage file
 ServerMain ..> MySQLManager : --storage mysql
 ServerMain ..> TcpSocket : listen and accept
 ServerMain ..> Session : detached thread per client
+ServerMain ..> AdminConfig : load --admin-config
+ServerMain ..> ServerConfigLoader : load --server-config
+ServerMain ..> SessionRegistry : creates shared registry
+ServerConfigLoader ..> ServerConfig
+ServerConfig ..> ServiceLimits
+ServerConfig ..> Session : client timeout
+ChatService ..> ServiceLimits : configured limits
 Session ..> TcpSocket : receive and send lines
+Session ..> SessionRegistry : register / unregister
 Session ..> Protocol : Split / Join
 Session ..> RequestRouter : route request under mutex
+RequestRouter ..> RequestContext : updates session state
+RequestRouter ..> AdminCredentials : checks ADMIN_LOGIN
+RequestRouter ..> SessionRegistry : kick users
 RequestRouter ..> ChatService : execute command
 ChatService --> IManager : load and persist mutations
 IManager <|.. FileManager
@@ -129,9 +227,12 @@ IManager <|.. MySQLManager
 MySQLManager --> MySQLConfig
 FileManager --> StateFiles
 
-ChatService *-- "0..*" User : m_users
-ChatService *-- "1..*" BaseChat : m_chats
-BaseChat *-- "0..1000" Message : m_messages
+ChatService *-- User : m_users
+ChatService *-- BaseChat : m_chats
+ChatService ..> BanPeriod : calculate ban expiration
+ChatService ..> UserInfo
+ChatService ..> ChatInfo
+BaseChat *-- Message : m_messages
 BaseChat <|-- PrivateChat
 PrivateChat ..> User : participants identified by login
 User ..> PasswordProtector : Verify()
@@ -141,17 +242,34 @@ ChatService ..> PrivateChat : create and inspect
 note right of RequestRouter
   Supported commands:
   REGISTER, LOGIN, LOGOUT, IS_AUTH,
-  CUR_USER, GET_MY_CHATS, CREATE_PRIVATE,
-  GET_MESSAGES, SEND_MESSAGE, GET_ALL_USERS
+  CUR_USER, CUR_LOGIN, GET_MY_CHATS, CREATE_PRIVATE,
+  GET_MESSAGES, SEND_MESSAGE, GET_ALL_USERS,
+  ADMIN_LOGIN, ADMIN_GET_USERS,
+  ADMIN_GET_CHATS, ADMIN_CREATE_PRIVATE,
+  ADMIN_GET_MESSAGES, ADMIN_SEND_CHAT,
+  ADMIN_SEND_GENERAL, ADMIN_KICK_USER,
+  ADMIN_BAN_USER, ADMIN_UNBAN_USER
+end note
+
+note right of Session
+  Each client connection has a configured
+  receive timeout. ADMIN_KICK_USER sends
+  "disconnected by ADMIN" before closing
+  active user sockets.
 end note
 
 note right of ChatService
-  Domain limits:
+  Default domain limits:
   - GENERAL chat always exists
+  - maximum users is 0 meaning unlimited
   - maximum 991 chats on server
   - maximum 45 private chats per user
   - maximum message length is 256
   - maximum 1000 messages per chat
+  Server can override them via server.conf.
+  - admin messages use visible name ADMIN
+  - admin private chats use hidden login __admin__
+  - forever ban deletes private user chats
 end note
 
 note bottom of PasswordProtector
@@ -172,6 +290,7 @@ participant "TcpSocket" as Socket
 participant "HandleClientSession" as Session
 participant "Protocol" as Protocol
 participant "HandleRequest" as Router
+participant "SessionRegistry" as Registry
 participant "ChatService" as Service
 participant "BaseChat / PrivateChat" as Chat
 database "users.db / chats.db" as State
@@ -181,22 +300,32 @@ Session -> Protocol : Split(request, TAB)
 Protocol --> Session : request parts
 
 group shared service mutex locked
-  Session -> Router : HandleRequest(parts, service, currentLogin)
-  Router -> Service : call command method
-  Service -> Service : validate user, arguments and limits
+  Session -> Router : HandleRequest(parts, service, context, adminCredentials, registry)
+  alt ADMIN_LOGIN
+    Router -> Router : validate AdminCredentials
+    Router -> Router : context.isAdmin = true
+  else user or admin command
+    Router -> Service : call command method
+    Service -> Service : validate user, arguments and limits
 
-  opt chat command
-    Service -> Chat : participant check or message operation
-    Chat --> Service : result
+    opt chat command
+      Service -> Chat : participant check or message operation
+      Chat --> Service : result
+    end
+
+    opt registration, chat creation, message, ban or private cleanup
+      Service -> State : AddUser / AddChat / AddMessage / UpdateUserBan / DeletePrivateChatsWithUser
+      State --> Service : write result
+      Service -> Service : update memory after success
+    end
+
+    Service --> Router : operation result
   end
 
-  opt registration, chat creation or message send
-    Service -> State : AddUser / AddChat / AddMessage
-    State --> Service : write result
-    Service -> Service : update memory after success
+  opt kick or ban active user
+    Router -> Registry : KickUser(login)
   end
 
-  Service --> Router : operation result
   Router --> Session : OK data or ERR description
 end
 

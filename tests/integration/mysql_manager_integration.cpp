@@ -1,4 +1,5 @@
 #include "console_chat/core/password_protector.h"
+#include "console_chat/core/base_chat.h"
 #include "console_chat/storage/mysql_manager.h"
 
 #include <gtest/gtest.h>
@@ -11,6 +12,7 @@
 namespace {
 
 using console_chat::core::ChatState;
+using console_chat::core::MAX_MESSAGES_PER_CHAT;
 using console_chat::core::Message;
 using console_chat::core::PasswordProtector;
 using console_chat::core::ServiceState;
@@ -67,11 +69,13 @@ TEST(MySQLManagerIntegration, PersistsAndLoadsServiceState) {
     ASSERT_TRUE(manager.AddMessage(
         generalChat.Name,
         firstUser.Login,
-        Message{firstUser.Name, "General message"})) << manager.GetLastError();
+        Message{firstUser.Name, "General message"},
+        MAX_MESSAGES_PER_CHAT)) << manager.GetLastError();
     ASSERT_TRUE(manager.AddMessage(
         privateChat.Name,
         secondUser.Login,
-        Message{secondUser.Name, "Private message"})) << manager.GetLastError();
+        Message{secondUser.Name, "Private message"},
+        MAX_MESSAGES_PER_CHAT)) << manager.GetLastError();
 
     ServiceState loaded;
     ASSERT_TRUE(manager.Load(loaded)) << manager.GetLastError();

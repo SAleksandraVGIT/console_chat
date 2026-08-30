@@ -23,8 +23,11 @@
 Проект поддерживает:
 - регистрацию и авторизацию пользователей;
 - общий чат `GENERAL`;
-- приватные чаты между двумя пользователями;
+- приватные чаты между двумя пользователями или пользователя с собой;
 - отправку и просмотр сообщений через консольное меню;
+- режим администратора через `console_chat --admin`;
+- просмотр пользователей и всех чатов администратором;
+- отключение пользователей и бан на срок или навсегда;
 - одновременную работу нескольких клиентов через TCP.
 - сохранение пользователей, чатов и истории сообщений в файлах.
 
@@ -118,6 +121,60 @@ mysql -u root -p < database/setup.sql
 
 `CREATE TABLE IF NOT EXISTS` позволяет повторно запускать скрипт, но не обновляет структуру
 уже существующих таблиц. Последующие изменения схемы следует оформлять отдельными миграциями.
+Если база была создана до появления банов, примените миграцию:
+
+```bash
+mysql -u root -p < database/migrate_admin_bans.sql
+```
+
+Если база была создана до поддержки чатов с собой, примените миграцию:
+
+```bash
+mysql -u root -p < database/migrate_self_chats.sql
+```
+
+### Подготовка администратора
+
+Администратор не хранится как обычный пользователь чата и не отображается в списке пользователей.
+Для включения админ-входа создайте локальный файл `config/admin.conf` по шаблону:
+
+```bash
+cp config/admin.conf.example config/admin.conf
+```
+
+Формат файла:
+
+```text
+login=admin
+password=change_me
+```
+
+Если `config/admin.conf` отсутствует, сервер стартует в обычном режиме, но команда
+`ADMIN_LOGIN` будет недоступна. Путь можно изменить параметром сервера `--admin-config`.
+
+### Настройка серверных лимитов
+
+Серверные ограничения и idle-timeout клиента задаются локальным файлом `config/server.conf`.
+Если файл отсутствует, сервер использует текущие дефолтные значения.
+
+```bash
+cp config/server.conf.example config/server.conf
+```
+
+Формат файла:
+
+```text
+max_users=0
+client_timeout_minutes=15
+max_chats=991
+max_private_chats_per_user=45
+max_message_length=256
+max_messages_per_chat=1000
+```
+
+`max_users=0` означает отсутствие лимита пользователей. Для таймаута можно использовать
+`client_timeout_minutes` или `client_timeout_seconds`. Путь можно изменить параметром
+сервера `--server-config`.
 
 ## 4. Сборка и тесты
 
@@ -186,6 +243,9 @@ ctest --test-dir build --output-on-failure
 
 ```bash
 ./build/console_chat
+
+# Запуск админского режима клиента
+./build/console_chat --admin
 ```
 
 Параметры запуска:
@@ -198,10 +258,29 @@ ctest --test-dir build --output-on-failure
 - запуск сервера без подгрузки истории: `./build/chat_server --reset-state`
 - пользовательские файлы состояния: `./build/chat_server --users-file data/users.db --chats-file data/chats.db`
 - конфигурация MySQL: `./build/chat_server --storage mysql --mysql-config config/mysql.conf`
+- конфигурация администратора: `./build/chat_server --admin-config config/admin.conf`
+- серверные лимиты и timeout: `./build/chat_server --server-config config/server.conf`
+- админский режим клиента: `./build/console_chat --admin`
 
 В режиме MySQL параметр `--reset-state` удаляет все сообщения, чаты и пользователей из
 выбранной базы. Без этого параметра сервер только загружает сохранённое состояние и создаёт
 общий чат `GENERAL`, если его ещё нет.
+
+При создании приватного чата с участником, с которым уже есть чат, клиент показывает имя
+существующего чата.
+
+В админском режиме доступны просмотр всех пользователей, просмотр всех чатов включая
+`GENERAL`, отдельное открытие общего чата `GENERAL`, чтение любого приватного чата,
+создание приватного чата `ADMIN <-> пользователь`, отправка сообщений от имени `ADMIN`
+в `GENERAL` и в свои приватные чаты, отключение пользователя, бан на 1 день, 10 дней,
+месяц, год или навсегда и снятие бана. При вечном бане приватные чаты этого пользователя
+удаляются.
+
+При отключении через `Disconnect user` сервер отправляет пользователю служебный ответ
+`disconnected by ADMIN` и закрывает соединение. Так как клиент работает в синхронном режиме
+запрос-ответ, сообщение будет показано при следующем обращении клиента к серверу.
+Сервер также автоматически закрывает клиентскую сессию после idle-timeout из `server.conf`
+(по умолчанию 15 минут) сетевой неактивности.
 
 ### Windows (PowerShell)
 
@@ -219,6 +298,9 @@ ctest --test-dir build --output-on-failure
 
 ```powershell
 .\build\console_chat.exe
+
+# Запуск админского режима клиента
+.\build\console_chat.exe --admin
 ```
 
 Параметры запуска:
@@ -231,6 +313,9 @@ ctest --test-dir build --output-on-failure
 - запуск сервера без подгрузки истории: `.\build\chat_server.exe --reset-state`
 - пользовательские файлы состояния: `.\build\chat_server.exe --users-file data/users.db --chats-file data/chats.db`
 - конфигурация MySQL: `.\build\chat_server.exe --storage mysql --mysql-config config\mysql.conf`
+- конфигурация администратора: `.\build\chat_server.exe --admin-config config\admin.conf`
+- серверные лимиты и timeout: `.\build\chat_server.exe --server-config config\server.conf`
+- админский режим клиента: `.\build\console_chat.exe --admin`
 
 ## 6. Структура проекта
 
@@ -244,7 +329,7 @@ ctest --test-dir build --output-on-failure
 - `src/network/` — реализация сокетного слоя
 - `src/storage/` — реализации менеджеров хранения и внутренние SQL-запросы MySQL
 - `database/` — SQL-скрипты создания базы данных и таблиц
-- `config/` — шаблон конфигурации подключения к MySQL
+- `config/` — шаблоны локальных конфигураций MySQL, администратора и серверных лимитов
 - `scripts/` — скрипты настройки окружения проекта
 - `CMakeLists.txt` — конфигурация сборки
 
@@ -313,11 +398,3 @@ cmake -S . -B build -G "MinGW Makefiles"; cmake --build build; .\build\console_c
 ### 6
 
 - Файл с указанием версии
-
-### 7
-
-- Добавить возможность чата с собой
-
-### 8
-
-- При создании часта с участником с которым уже есть чат вывести название даенного чата

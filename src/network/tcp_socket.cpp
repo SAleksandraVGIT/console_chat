@@ -10,6 +10,7 @@
 #include <unistd.h>
 #endif
 
+#include <cerrno>
 #include <stdexcept>
 #include <string>
 
@@ -46,6 +47,22 @@ void CloseNativeSocket(const NativeSocket fd) {
     closesocket(fd);
 }
 
+bool WasLastNativeReceiveTimeout() {
+    const int error = WSAGetLastError();
+    return error == WSAETIMEDOUT || error == WSAEWOULDBLOCK;
+}
+
+bool SetNativeReceiveTimeout(const NativeSocket fd, const std::chrono::seconds timeout) {
+    const auto milliseconds =
+        static_cast<DWORD>(std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count());
+    return setsockopt(
+        fd,
+        SOL_SOCKET,
+        SO_RCVTIMEO,
+        reinterpret_cast<const char*>(&milliseconds),
+        sizeof(milliseconds)) == 0;
+}
+
 #else
 
 using SocketLen = socklen_t;
@@ -63,6 +80,22 @@ void EnsureWinsockInitialized() {
 
 void CloseNativeSocket(const NativeSocket fd) {
     close(fd);
+}
+
+bool WasLastNativeReceiveTimeout() {
+    return errno == EAGAIN || errno == EWOULDBLOCK;
+}
+
+bool SetNativeReceiveTimeout(const NativeSocket fd, const std::chrono::seconds timeout) {
+    timeval value{};
+    value.tv_sec = timeout.count();
+    value.tv_usec = 0;
+    return setsockopt(
+        fd,
+        SOL_SOCKET,
+        SO_RCVTIMEO,
+        &value,
+        sizeof(value)) == 0;
 }
 
 #endif
@@ -165,11 +198,13 @@ bool TcpSocket::SendLine(const std::string& line) const {
 }
 
 bool TcpSocket::RecvLine(std::string& line) const {
+    m_lastReceiveTimedOut = false;
     line.clear();
     char ch = '\0';
     while (true) {
         const auto n = recv(ToNative(m_fd), &ch, 1, 0);
         if (n <= 0) {
+            m_lastReceiveTimedOut = n < 0 && WasLastNativeReceiveTimeout();
             return false;
         }
         if (ch == '\n') {
@@ -192,6 +227,18 @@ std::string TcpSocket::GetPeerAddress() const {
     }
 
     return std::string(ip) + ":" + std::to_string(ntohs(peer.sin_port));
+}
+
+bool TcpSocket::SetReceiveTimeout(const std::chrono::seconds timeout) {
+    if (!IsValid()) {
+        return false;
+    }
+
+    return SetNativeReceiveTimeout(ToNative(m_fd), timeout);
+}
+
+bool TcpSocket::WasLastReceiveTimedOut() const {
+    return m_lastReceiveTimedOut;
 }
 
 void TcpSocket::Close() {

@@ -1,8 +1,11 @@
 #include "console_chat/storage/file_manager.h"
 
+#include "console_chat/core/chat_service.h"
+
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <sstream>
 #include <algorithm>
 #include <utility>
 
@@ -98,15 +101,32 @@ bool FileManager::ReadState(core::ServiceState& state) const {
         return false;
     }
 
+    std::string line;
+    std::getline(usersIn, line);
+
     loaded.Users.reserve(usersCount);
     for (size_t i = 0; i < usersCount; ++i) {
+        if (!std::getline(usersIn, line)) {
+            return false;
+        }
+
+        std::istringstream userLine(line);
         core::UserState user;
-        if (!(usersIn >> std::quoted(user.Login)
-                      >> std::quoted(user.Name)
-                      >> std::quoted(user.PasswordHash)))
+        int bannedForever = 0;
+        if (!(userLine >> std::quoted(user.Login)
+                       >> std::quoted(user.Name)
+                       >> std::quoted(user.PasswordHash)))
         {
             return false;
         }
+
+        if (userLine >> user.BannedUntilEpoch >> bannedForever) {
+            if (bannedForever != 0 && bannedForever != 1) {
+                return false;
+            }
+            user.BannedForever = bannedForever == 1;
+        }
+
         loaded.Users.emplace_back(std::move(user));
     }
 
@@ -171,7 +191,9 @@ bool FileManager::WriteState(const core::ServiceState& state) const {
         for (const auto& user : state.Users) {
             usersOut << std::quoted(user.Login) << ' '
                      << std::quoted(user.Name) << ' '
-                     << std::quoted(user.PasswordHash) << '\n';
+                     << std::quoted(user.PasswordHash) << ' '
+                     << user.BannedUntilEpoch << ' '
+                     << (user.BannedForever ? 1 : 0) << '\n';
         }
         usersOut.flush();
         if (!usersOut) {
@@ -244,21 +266,24 @@ bool FileManager::AddChat(const core::ChatState& chat) {
         m_state.Chats.begin(),
         m_state.Chats.end(),
         [&chat](const core::ChatState& stored) { return stored.Name == chat.Name; });
-    
+
     if (duplicate != m_state.Chats.end()) {
         return false;
     }
 
     if (chat.IsPrivate) {
         const auto userExists = [this](const std::string& login) {
+            if (login == core::ADMIN_SYSTEM_LOGIN) {
+                return true;
+            }
+
             return std::any_of(
                 m_state.Users.begin(),
                 m_state.Users.end(),
                 [&login](const core::UserState& user) { return user.Login == login; });
         };
 
-        if (chat.Participants[0] == chat.Participants[1] ||
-            !userExists(chat.Participants[0]) ||
+        if (!userExists(chat.Participants[0]) ||
             !userExists(chat.Participants[1]))
         {
             return false;
@@ -278,7 +303,8 @@ bool FileManager::AddChat(const core::ChatState& chat) {
 bool FileManager::AddMessage(
     const std::string& chatName,
     const std::string& senderLogin,
-    const core::Message& message)
+    const core::Message& message,
+    const size_t maxMessagesPerChat)
 {
     if (!m_initialized) {
         return false;
@@ -293,10 +319,10 @@ bool FileManager::AddMessage(
         updated.Users.begin(),
         updated.Users.end(),
         [&senderLogin](const core::UserState& user) { return user.Login == senderLogin; });
-    
+
     if (chat == updated.Chats.end() ||
         !userExists ||
-        chat->Messages.size() >= core::MAX_MESSAGES_PER_CHAT)
+        chat->Messages.size() >= maxMessagesPerChat)
     {
         return false;
     }
@@ -309,6 +335,99 @@ bool FileManager::AddMessage(
     }
 
     chat->Messages.push_back(message);
+    if (!WriteState(updated)) {
+        return false;
+    }
+
+    m_state = std::move(updated);
+    return true;
+}
+
+bool FileManager::AddAdminMessage(
+    const std::string& chatName,
+    const core::Message& message,
+    const size_t maxMessagesPerChat)
+{
+    if (!m_initialized) {
+        return false;
+    }
+
+    auto updated = m_state;
+    const auto chat = std::find_if(
+        updated.Chats.begin(),
+        updated.Chats.end(),
+        [&chatName](const core::ChatState& stored) { return stored.Name == chatName; });
+
+    if (chat == updated.Chats.end() ||
+        chat->Messages.size() >= maxMessagesPerChat)
+    {
+        return false;
+    }
+
+    if (chat->IsPrivate &&
+        chat->Participants[0] != core::ADMIN_SYSTEM_LOGIN &&
+        chat->Participants[1] != core::ADMIN_SYSTEM_LOGIN)
+    {
+        return false;
+    }
+
+    chat->Messages.push_back(message);
+    if (!WriteState(updated)) {
+        return false;
+    }
+
+    m_state = std::move(updated);
+    return true;
+}
+
+bool FileManager::UpdateUserBan(
+    const std::string& login,
+    const std::int64_t bannedUntilEpoch,
+    const bool bannedForever)
+{
+    if (!m_initialized) {
+        return false;
+    }
+
+    auto updated = m_state;
+    const auto user = std::find_if(
+        updated.Users.begin(),
+        updated.Users.end(),
+        [&login](const core::UserState& stored) { return stored.Login == login; });
+
+    if (user == updated.Users.end()) {
+        return false;
+    }
+
+    user->BannedUntilEpoch = bannedUntilEpoch;
+    user->BannedForever = bannedForever;
+    if (!WriteState(updated)) {
+        return false;
+    }
+
+    m_state = std::move(updated);
+    return true;
+}
+
+bool FileManager::DeletePrivateChatsWithUser(const std::string& login) {
+    if (!m_initialized) {
+        return false;
+    }
+
+    auto updated = m_state;
+    const auto newEnd = std::remove_if(
+        updated.Chats.begin(),
+        updated.Chats.end(),
+        [&login](const core::ChatState& chat) {
+            return chat.IsPrivate &&
+                (chat.Participants[0] == login || chat.Participants[1] == login);
+        });
+
+    if (newEnd == updated.Chats.end()) {
+        return true;
+    }
+
+    updated.Chats.erase(newEnd, updated.Chats.end());
     if (!WriteState(updated)) {
         return false;
     }

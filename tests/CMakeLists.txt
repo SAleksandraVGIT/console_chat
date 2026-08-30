@@ -21,12 +21,19 @@ include(GoogleTest)
 
 # Создает исполняемый файл с unit-тестами.
 add_executable(console_chat_unit_tests
+  ${CMAKE_SOURCE_DIR}/src/server/server_config.cpp
   unit/base_chat.cpp
   unit/chat_service.cpp
   unit/mysql_manager.cpp
   unit/password_protector.cpp
   unit/private_chat.cpp
+  unit/server_config.cpp
   unit/user.cpp
+)
+
+target_include_directories(console_chat_unit_tests
+  PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/server
 )
 
 # Линкует unit-тесты с кодом проекта и gtest_main, который содержит main() для тестов.

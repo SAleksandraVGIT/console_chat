@@ -7,9 +7,11 @@ skinparam linetype ortho
 skinparam wrapWidth 220
 
 actor "Console user" as User
+actor "Administrator" as Admin
 
 node "Client process: console_chat" as ClientNode {
   [ChatConsole] as Console
+  [Admin menu\n(--admin)] as AdminConsole
   [ChatClient] as Client
   [Client TcpSocket] as ClientSocket
 }
@@ -19,13 +21,18 @@ cloud "TCP/IP\nline protocol on port 7777" as Network
 node "Server process: chat_server" as ServerNode {
   [Listen TcpSocket] as ListenSocket
   [Client session thread] as Session
+  [SessionRegistry] as SessionRegistry
   [Request router] as Router
+  [AdminConfig] as AdminConfig
+  [ServerConfig] as ServerConfig
   [Shared ChatService] as Service
   [IManager] as Storage
 }
 
 database "Persistent state" as State {
   file "users.db / chats.db" as StateFiles
+  file "admin.conf" as AdminFile
+  file "server.conf" as ServerFile
 }
 
 package "Domain objects" as Domain {
@@ -37,15 +44,23 @@ package "Domain objects" as Domain {
 }
 
 User --> Console : commands and messages
+Admin --> AdminConsole : admin commands
 Console --> Client : client API calls
+AdminConsole --> Client : admin API calls
 Client --> ClientSocket : request / response lines
 ClientSocket --> Network
 Network --> ListenSocket
 ListenSocket --> Session : accepted connection
+Session --> SessionRegistry : register, unregister, kick
 Session --> Router : parsed request
+Router --> AdminConfig : ADMIN_LOGIN check
 Router --> Service : synchronized operation
 Service --> Storage : load and point mutations
 Storage --> StateFiles : file backend
+AdminConfig --> AdminFile : load credentials
+ServerConfig --> ServerFile : load limits and timeout
+ServerConfig --> Service : ServiceLimits
+ServerConfig --> Session : idle timeout
 Service --> UserEntity : owns users
 Service --> GeneralChat : owns GENERAL chat
 Service --> PrivateChat : owns private chats
@@ -60,15 +75,30 @@ end note
 
 note right of Session
   The server creates one detached thread
-  and one currentLogin value per connection.
+  and one RequestContext per connection.
   A shared mutex protects ChatService.
+  SessionRegistry can close active
+  user sockets for kick and ban.
+  Client sessions use the configured
+  receive timeout.
 end note
 
 note right of Storage
   Server selects FileManager or MySQLManager
   with --storage file|mysql.
   MySQLManager implements loading,
-  point writes, and reset operations.
+  point writes, user bans, private chat
+  cleanup, and reset operations.
+end note
+
+note right of AdminConsole
+  --admin changes only the console menu.
+  Server-side ADMIN_LOGIN and RequestContext
+  decide whether admin commands are allowed.
+  GENERAL opens separately.
+  Show chats lists GENERAL and private chats.
+  Admin-owned private chats use __admin__
+  internally and ADMIN as visible sender.
 end note
 
 @enduml
@@ -86,7 +116,9 @@ participant "ChatClient" as Client
 participant "Client TcpSocket" as ClientSocket
 participant "Server TcpSocket" as ServerSocket
 participant "Session thread" as Session
+participant "SessionRegistry" as Registry
 participant "Request router" as Router
+participant "AdminConfig" as AdminConfig
 participant "ChatService" as Service
 database "State files" as State
 
@@ -98,15 +130,24 @@ ServerSocket -> Session : RecvLine()
 
 group mutex protects shared ChatService
   Session -> Router : HandleRequest()
-  Router -> Service : domain method
+  alt admin login
+    Router -> AdminConfig : compare configured credentials
+    AdminConfig --> Router : auth result
+  else user or admin command
+    Router -> Service : domain method
 
-  opt registration, private chat creation or message send
-    Service -> State : AddUser / AddChat / AddMessage
-    State --> Service : result
-    Service -> Service : update memory after success
+    opt registration, chat creation, message, ban or cleanup
+      Service -> State : AddUser / AddChat / AddMessage / UpdateUserBan / DeletePrivateChatsWithUser
+      State --> Service : result
+      Service -> Service : update memory after success
+    end
+
+    Service --> Router : result
   end
 
-  Service --> Router : result
+  opt ADMIN_KICK_USER or ADMIN_BAN_USER
+    Router -> Registry : KickUser(login)
+  end
 
   Router --> Session : OK or ERR response
 end

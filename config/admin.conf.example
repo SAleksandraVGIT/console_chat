@@ -1,0 +1,3 @@
+# Copy this file to config/admin.conf and choose your own credentials.
+login=admin
+password=change_me

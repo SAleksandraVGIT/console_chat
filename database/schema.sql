@@ -1,7 +1,9 @@
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    login VARCHAR(100) NOT NULL UNIQUE
+    login VARCHAR(100) NOT NULL UNIQUE,
+    banned_until_epoch BIGINT NOT NULL DEFAULT 0,
+    banned_forever TINYINT(1) NOT NULL DEFAULT 0
 ) ENGINE=InnoDB;
 
 CREATE TABLE IF NOT EXISTS users_passwords (
@@ -42,7 +44,6 @@ CREATE TABLE IF NOT EXISTS chats (
             (
                 first_user_id IS NOT NULL
                 AND second_user_id IS NOT NULL
-                AND first_user_id <> second_user_id
             )
         )
 ) ENGINE=InnoDB;

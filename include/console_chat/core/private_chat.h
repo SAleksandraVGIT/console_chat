@@ -11,8 +11,12 @@ namespace console_chat::core {
 
 class PrivateChat : public BaseChat {
 public:
-    PrivateChat(std::string user1, std::string user2)
-        : m_users{std::move(user1), std::move(user2)}
+    PrivateChat(
+        std::string user1,
+        std::string user2,
+        const size_t maxMessages = MAX_MESSAGES_PER_CHAT)
+        : BaseChat(maxMessages)
+        , m_users{std::move(user1), std::move(user2)}
     {}
 
     bool IsParticipant(const std::string& login) const override;

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <chrono>
 #include <string>
 
 namespace console_chat::network {
@@ -29,6 +30,9 @@ public:
     bool RecvLine(std::string& line) const;
     std::string GetPeerAddress() const;
 
+    bool SetReceiveTimeout(std::chrono::seconds timeout);
+    bool WasLastReceiveTimedOut() const;
+
     void Close();
 
     inline  bool IsValid() const {
@@ -40,6 +44,7 @@ private:
 
 private:
     std::intptr_t m_fd{-1};
+    mutable bool m_lastReceiveTimedOut = false;
 };
 
 } // namespace console_chat::network

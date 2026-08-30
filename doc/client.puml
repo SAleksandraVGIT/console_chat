@@ -17,17 +17,31 @@ package "Client application (console_chat)" {
   class ChatConsole {
     +ChatConsole(service)
     +Run() : int
+    +RunAdmin() : int
     -UserMenu()
+    -AdminMenu()
     -RegistrationFlow()
     -LoginFlow()
+    -AdminLoginFlow()
     -CreatePrivateChatFlow()
     -OpenChatFlow()
     -OpenGeneralChatFlow()
     -ChatSession(chatName)
     -ShowMyChatsFlow()
     -ShowAllUsersFlow()
+    -AdminShowUsersFlow()
+    -AdminShowChatsFlow()
+    -AdminCreatePrivateChatFlow()
+    -AdminOpenPrivateChatFlow()
+    -AdminOpenGeneralChatFlow()
+    -AdminChatSession(chatName, canSend)
+    -AdminKickUserFlow()
+    -AdminBanUserFlow()
+    -AdminUnbanUserFlow()
     -ShowMainMenu()
     -ShowUserMenu()
+    -ShowAdminMainMenu()
+    -ShowAdminMenu()
     -m_service : ChatClient&
   }
 
@@ -36,14 +50,28 @@ package "Client application (console_chat)" {
     +~ChatClient()
     +Register(name, login, password) : bool
     +Authenticate(login, password) : bool
+    +AuthenticateDetailed(login, password) : AuthResult
     +Logout()
     +IsAuthenticated() : bool
+    +GetCurrentUserLogin() : string
     +GetCurrentUserName() : string
     +GetMyChats() : vector<string>
     +CreatePrivateChat(recipientLogin, chatName) : bool
+    +CreatePrivateChatDetailed(recipientLogin, chatName) : CreatePrivateChatResult
     +GetMessages(chatName) : vector<Message>
     +SendMessage(chatName, text) : bool
     +GetAllUserLogins() : vector<string>
+    +AdminLogin(login, password) : bool
+    +AdminGetUsers() : vector<AdminUserInfo>
+    +AdminGetChats() : vector<AdminChatInfo>
+    +AdminCreatePrivateChat(recipientLogin, chatName) : bool
+    +AdminCreatePrivateChatDetailed(recipientLogin, chatName) : CreatePrivateChatResult
+    +AdminGetMessages(chatName) : vector<Message>
+    +AdminSendMessageToChat(chatName, text) : bool
+    +AdminSendGeneral(text) : bool
+    +AdminKickUser(login) : bool
+    +AdminBanUser(login, period) : bool
+    +AdminUnbanUser(login) : bool
     -Request(parts) : vector<string>
     -{static} Split(line, delim) : vector<string>
     -m_socket : TcpSocket
@@ -63,6 +91,23 @@ package "Client application (console_chat)" {
     OPEN_GENERAL_CHAT = 4
     SHOW_ALL_USERS = 5
   }
+
+  enum ActionAdminMainMenu {
+    EXIT = 0
+    LOGIN = 1
+  }
+
+  enum ActionAdminMenu {
+    LOG_OUT = 0
+    SHOW_USERS = 1
+    SHOW_CHATS = 2
+    CREATE_PRIVATE_CHAT = 3
+    OPEN_PRIVATE_CHAT = 4
+    OPEN_GENERAL_CHAT = 5
+    KICK_USER = 6
+    BAN_USER = 7
+    UNBAN_USER = 8
+  }
 }
 
 package "Network" {
@@ -75,6 +120,8 @@ package "Network" {
     +Connect(host, port)
     +SendLine(line) : bool
     +RecvLine(line) : bool
+    +SetReceiveTimeout(timeout) : bool
+    +WasLastReceiveTimedOut() : bool
     +Close()
     +IsValid() : bool
     -EnsureCreated()
@@ -87,6 +134,34 @@ package "Shared model" {
     +Name : string
     +Text : string
   }
+
+  class AuthResult <<struct>> {
+    +Success : bool
+    +Error : string
+    +BanStatus : string
+    +BannedUntilEpoch : string
+    +ServerNowEpoch : string
+  }
+
+  class CreatePrivateChatResult <<struct>> {
+    +Success : bool
+    +ExistingChatName : string
+  }
+
+  class AdminUserInfo <<struct>> {
+    +Login : string
+    +Name : string
+    +BanStatus : string
+    +BannedUntilEpoch : string
+    +ServerNowEpoch : string
+  }
+
+  class AdminChatInfo <<struct>> {
+    +Name : string
+    +Type : string
+    +FirstUserLogin : string
+    +SecondUserLogin : string
+  }
 }
 
 User --> ChatConsole : menu and chat input
@@ -95,8 +170,14 @@ ClientMain ..> ChatConsole : creates and runs
 ChatConsole o-- ChatClient : uses
 ChatConsole ..> ActionMainMenu
 ChatConsole ..> ActionUserMenu
+ChatConsole ..> ActionAdminMainMenu
+ChatConsole ..> ActionAdminMenu
 ChatClient *-- TcpSocket : owns connection
 ChatClient ..> Message : creates from response
+ChatClient ..> AuthResult : detailed login response
+ChatClient ..> CreatePrivateChatResult
+ChatClient ..> AdminUserInfo
+ChatClient ..> AdminChatInfo
 TcpSocket --> "chat_server" : TCP line protocol
 
 note right of ChatClient
@@ -106,11 +187,19 @@ note right of ChatClient
   Response format:
   OK<TAB>DATA...
   ERR<TAB>DESCRIPTION
+
+  Banned login:
+  ERR<TAB>banned<TAB>TEMP|FOREVER<TAB>until<TAB>serverNow
+
+  Forced disconnect:
+  ERR<TAB>disconnected by ADMIN
+  ERR<TAB>disconnected by inactivity timeout
 end note
 
 note bottom of TcpSocket
   The client keeps one TCP connection
   for the lifetime of ChatClient.
+  --admin only selects a different menu.
 end note
 
 @enduml

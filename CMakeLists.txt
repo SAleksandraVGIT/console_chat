@@ -79,6 +79,8 @@ target_link_libraries(console_chat PRIVATE chat_core)
 # Создаёт исполняемый файл сервера из серверных исходников.
 add_executable(chat_server
   src/server/main.cpp
+  src/server/admin_config.cpp
+  src/server/server_config.cpp
   src/server/protocol.cpp
   src/server/request_router.cpp
   src/server/session.cpp

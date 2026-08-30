@@ -76,3 +76,5 @@ data/
 
 # В Git хранится только безопасный шаблон без пароля.
 !/config/mysql.conf.example
+!/config/admin.conf.example
+!/config/server.conf.example

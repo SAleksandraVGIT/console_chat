@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace console_chat::client {
 
@@ -57,7 +58,18 @@ std::vector<std::string> ChatClient::Request(const std::vector<std::string>& par
         throw std::runtime_error("Failed to receive response.");
     }
 
-    return Split(line, '\t');
+    auto response = Split(line, '\t');
+    if (response.size() >= 2 &&
+        response[0] == "ERR") {
+        if (response[1] == "disconnected by ADMIN") {
+            throw std::runtime_error("Disconnected by ADMIN.");
+        }
+        if (response[1] == "disconnected by inactivity timeout") {
+            throw std::runtime_error("Disconnected due to inactivity timeout.");
+        }
+    }
+
+    return response;
 }
 
 bool ChatClient::Register(std::string&& name, std::string&& login, std::string&& password) {
@@ -66,8 +78,25 @@ bool ChatClient::Register(std::string&& name, std::string&& login, std::string&&
 }
 
 bool ChatClient::Authenticate(const std::string& login, const std::string& password) {
+    return AuthenticateDetailed(login, password).Success;
+}
+
+AuthResult ChatClient::AuthenticateDetailed(const std::string& login, const std::string& password) {
     const auto resp = Request({"LOGIN", login, password});
-    return !resp.empty() && resp[0] == "OK";
+    AuthResult result;
+    result.Success = !resp.empty() && resp[0] == "OK";
+
+    if (!result.Success && resp.size() >= 2) {
+        result.Error = resp[1];
+    }
+
+    if (!result.Success && resp.size() >= 5 && resp[1] == "banned") {
+        result.BanStatus = resp[2];
+        result.BannedUntilEpoch = resp[3];
+        result.ServerNowEpoch = resp[4];
+    }
+
+    return result;
 }
 
 void ChatClient::Logout() {
@@ -77,6 +106,11 @@ void ChatClient::Logout() {
 bool ChatClient::IsAuthenticated() const {
     const auto resp = Request({"IS_AUTH"});
     return resp.size() >= 2 && resp[0] == "OK" && resp[1] == "1";
+}
+
+std::string ChatClient::GetCurrentUserLogin() const {
+    const auto resp = Request({"CUR_LOGIN"});
+    return (resp.size() >= 2 && resp[0] == "OK") ? resp[1] : std::string{};
 }
 
 std::string ChatClient::GetCurrentUserName() const {
@@ -93,8 +127,28 @@ std::vector<std::string> ChatClient::GetMyChats() const {
 }
 
 bool ChatClient::CreatePrivateChat(std::string&& recipientLogin, std::string&& chatName) {
+    return CreatePrivateChatDetailed(
+        std::move(recipientLogin),
+        std::move(chatName)).Success;
+}
+
+CreatePrivateChatResult ChatClient::CreatePrivateChatDetailed(
+    std::string&& recipientLogin,
+    std::string&& chatName)
+{
     const auto resp = Request({"CREATE_PRIVATE", recipientLogin, chatName});
-    return !resp.empty() && resp[0] == "OK";
+    if (!resp.empty() && resp[0] == "OK") {
+        return {true, {}};
+    }
+
+    if (resp.size() >= 3 &&
+        resp[0] == "ERR" &&
+        resp[1] == "chat already exists")
+    {
+        return {false, resp[2]};
+    }
+
+    return {};
 }
 
 std::vector<core::Message> ChatClient::GetMessages(const std::string& chatName) const {
@@ -122,6 +176,103 @@ std::vector<std::string> ChatClient::GetAllUserLogins() const {
         return {};
     }
     return std::vector<std::string>(resp.begin() + 1, resp.end());
+}
+
+bool ChatClient::AdminLogin(const std::string& login, const std::string& password) {
+    const auto resp = Request({"ADMIN_LOGIN", login, password});
+    return !resp.empty() && resp[0] == "OK";
+}
+
+std::vector<AdminUserInfo> ChatClient::AdminGetUsers() const {
+    const auto resp = Request({"ADMIN_GET_USERS"});
+    std::vector<AdminUserInfo> result;
+    if (resp.empty() || resp[0] != "OK") {
+        return result;
+    }
+
+    for (size_t i = 1; i + 4 < resp.size(); i += 5) {
+        result.push_back({resp[i], resp[i + 1], resp[i + 2], resp[i + 3], resp[i + 4]});
+    }
+
+    return result;
+}
+
+std::vector<AdminChatInfo> ChatClient::AdminGetChats() const {
+    const auto resp = Request({"ADMIN_GET_CHATS"});
+    if (resp.empty() || resp[0] != "OK") {
+        return {};
+    }
+
+    std::vector<AdminChatInfo> result;
+    for (size_t i = 1; i + 3 < resp.size(); i += 4) {
+        result.push_back({resp[i], resp[i + 1], resp[i + 2], resp[i + 3]});
+    }
+
+    return result;
+}
+
+bool ChatClient::AdminCreatePrivateChat(std::string&& recipientLogin, std::string&& chatName) {
+    return AdminCreatePrivateChatDetailed(
+        std::move(recipientLogin),
+        std::move(chatName)).Success;
+}
+
+CreatePrivateChatResult ChatClient::AdminCreatePrivateChatDetailed(
+    std::string&& recipientLogin,
+    std::string&& chatName)
+{
+    const auto resp = Request({"ADMIN_CREATE_PRIVATE", recipientLogin, chatName});
+    if (!resp.empty() && resp[0] == "OK") {
+        return {true, {}};
+    }
+
+    if (resp.size() >= 3 &&
+        resp[0] == "ERR" &&
+        resp[1] == "chat already exists")
+    {
+        return {false, resp[2]};
+    }
+
+    return {};
+}
+
+std::vector<core::Message> ChatClient::AdminGetMessages(const std::string& chatName) const {
+    const auto resp = Request({"ADMIN_GET_MESSAGES", chatName});
+    std::vector<core::Message> result;
+    if (resp.empty() || resp[0] != "OK") {
+        return result;
+    }
+
+    for (size_t i = 1; i + 1 < resp.size(); i += 2) {
+        result.push_back({resp[i], resp[i + 1]});
+    }
+
+    return result;
+}
+
+bool ChatClient::AdminSendMessageToChat(const std::string& chatName, std::string&& text) {
+    const auto resp = Request({"ADMIN_SEND_CHAT", chatName, text});
+    return !resp.empty() && resp[0] == "OK";
+}
+
+bool ChatClient::AdminSendGeneral(std::string&& text) {
+    const auto resp = Request({"ADMIN_SEND_GENERAL", text});
+    return !resp.empty() && resp[0] == "OK";
+}
+
+bool ChatClient::AdminKickUser(const std::string& login) {
+    const auto resp = Request({"ADMIN_KICK_USER", login});
+    return !resp.empty() && resp[0] == "OK";
+}
+
+bool ChatClient::AdminBanUser(const std::string& login, const std::string& period) {
+    const auto resp = Request({"ADMIN_BAN_USER", login, period});
+    return !resp.empty() && resp[0] == "OK";
+}
+
+bool ChatClient::AdminUnbanUser(const std::string& login) {
+    const auto resp = Request({"ADMIN_UNBAN_USER", login});
+    return !resp.empty() && resp[0] == "OK";
 }
 
 } // namespace console_chat::client

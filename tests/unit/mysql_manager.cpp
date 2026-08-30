@@ -1,4 +1,5 @@
 #include "console_chat/storage/mysql_manager.h"
+#include "console_chat/core/base_chat.h"
 
 #include <gtest/gtest.h>
 
@@ -44,7 +45,11 @@ TEST(MySQLManager, RejectsOperationsBeforeInitialization) {
     EXPECT_EQ(manager.GetLastError(), "MySQLManager is not initialized");
     EXPECT_FALSE(manager.AddChat(chat));
     EXPECT_EQ(manager.GetLastError(), "MySQLManager is not initialized");
-    EXPECT_FALSE(manager.AddMessage("GENERAL", "login", message));
+    EXPECT_FALSE(manager.AddMessage(
+        "GENERAL",
+        "login",
+        message,
+        console_chat::core::MAX_MESSAGES_PER_CHAT));
     EXPECT_EQ(manager.GetLastError(), "MySQLManager is not initialized");
 }
 

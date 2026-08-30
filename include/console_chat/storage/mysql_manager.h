@@ -49,10 +49,23 @@ public:
     bool Load(core::ServiceState& state) override;
     bool AddUser(const core::UserState& user) override;
     bool AddChat(const core::ChatState& chat) override;
+
     bool AddMessage(
         const std::string& chatName,
         const std::string& senderLogin,
-        const core::Message& message) override;
+        const core::Message& message,
+        size_t maxMessagesPerChat) override;
+    bool AddAdminMessage(
+        const std::string& chatName,
+        const core::Message& message,
+        size_t maxMessagesPerChat) override;
+
+    bool UpdateUserBan(
+        const std::string& login,
+        std::int64_t bannedUntilEpoch,
+        bool bannedForever) override;
+    bool DeletePrivateChatsWithUser(const std::string& login) override;
+
     bool Reset() override;
 
     const std::string& GetLastError() const noexcept;

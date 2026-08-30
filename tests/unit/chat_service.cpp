@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -17,6 +18,7 @@ using console_chat::core::ChatService;
 using console_chat::core::GENERAL_CHAT_NAME;
 using console_chat::core::MAX_MESSAGE_LENGTH;
 using console_chat::core::MAX_PRIVATE_CHATS_PER_USER;
+using console_chat::core::ServiceLimits;
 using console_chat::storage::FileManager;
 
 namespace fs = std::filesystem;
@@ -59,7 +61,8 @@ public:
     bool AddMessage(
         const std::string& chatName,
         const std::string&,
-        const console_chat::core::Message& message) override
+        const console_chat::core::Message& message,
+        const std::size_t) override
     {
         if (failAddMessage) {
             return false;
@@ -77,6 +80,64 @@ public:
         }
 
         chat->Messages.push_back(message);
+        return true;
+    }
+
+    bool AddAdminMessage(
+        const std::string& chatName,
+        const console_chat::core::Message& message,
+        const std::size_t) override
+    {
+        if (failAddMessage) {
+            return false;
+        }
+
+        const auto chat = std::find_if(
+            state.Chats.begin(),
+            state.Chats.end(),
+            [&chatName](const console_chat::core::ChatState& stored) {
+                return stored.Name == chatName;
+            });
+
+        if (chat == state.Chats.end()) {
+            return false;
+        }
+
+        chat->Messages.push_back(message);
+        return true;
+    }
+
+    bool UpdateUserBan(
+        const std::string& login,
+        const std::int64_t bannedUntilEpoch,
+        const bool bannedForever) override
+    {
+        const auto user = std::find_if(
+            state.Users.begin(),
+            state.Users.end(),
+            [&login](const console_chat::core::UserState& stored) {
+                return stored.Login == login;
+            });
+
+        if (user == state.Users.end()) {
+            return false;
+        }
+
+        user->BannedUntilEpoch = bannedUntilEpoch;
+        user->BannedForever = bannedForever;
+        return true;
+    }
+
+    bool DeletePrivateChatsWithUser(const std::string& login) override {
+        const auto newEnd = std::remove_if(
+            state.Chats.begin(),
+            state.Chats.end(),
+            [&login](const console_chat::core::ChatState& chat) {
+                return chat.IsPrivate &&
+                    (chat.Participants[0] == login || chat.Participants[1] == login);
+            });
+
+        state.Chats.erase(newEnd, state.Chats.end());
         return true;
     }
 
@@ -189,18 +250,23 @@ TEST(ChatService, PrivateChat) {
 
     EXPECT_FALSE(service.CreatePrivateChat("", "user_2", "user_1&2"));
     EXPECT_FALSE(service.CreatePrivateChat("unknown", "user_2", "user_1&2"));
-    EXPECT_FALSE(service.CreatePrivateChat("user_1", "user_1", "user_1_self"));
     EXPECT_FALSE(service.CreatePrivateChat("user_1", "unknown", "user_1_unknown"));
+
+    EXPECT_TRUE(service.CreatePrivateChat("user_1", "user_1", "user_1_self"));
+    EXPECT_FALSE(service.CreatePrivateChat("user_1", "user_1", "user_1_self_duplicate"));
+    EXPECT_EQ(service.GetPrivateChatName("user_1", "user_1"), "user_1_self");
 
     EXPECT_TRUE(service.CreatePrivateChat("user_1", "user_2", "user_1&2"));
     EXPECT_FALSE(service.CreatePrivateChat("user_1", "user_4", "user_1&2"));
     EXPECT_FALSE(service.CreatePrivateChat("user_2", "user_1", "user_1&2_duplicate_pair"));
+    EXPECT_EQ(service.GetPrivateChatName("user_2", "user_1"), "user_1&2");
 
     const auto aliceChats = service.GetMyChats("user_1");
     const auto bobChats = service.GetMyChats("user_2");
     const auto malloryChats = service.GetMyChats("user_4");
 
     EXPECT_TRUE(Contains(aliceChats, GENERAL_CHAT_NAME));
+    EXPECT_TRUE(Contains(aliceChats, "user_1_self"));
     EXPECT_TRUE(Contains(aliceChats, "user_1&2"));
     EXPECT_TRUE(Contains(bobChats, "user_1&2"));
     EXPECT_FALSE(Contains(malloryChats, "user_1&2"));
@@ -223,6 +289,108 @@ TEST(ChatService, PrivateAccess) {
     ASSERT_EQ(messagesForBob.size(), 1u);
     EXPECT_EQ(messagesForBob[0].Name, "User_1");
     EXPECT_EQ(messagesForBob[0].Text, "Private hello");
+}
+
+TEST(ChatService, AdminCanReadPrivateChat) {
+    ChatService service;
+
+    ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
+    ASSERT_TRUE(service.Register("User_2", "user_2", "secret"));
+    ASSERT_TRUE(service.CreatePrivateChat("user_1", "user_2", "user_1&2"));
+    ASSERT_TRUE(service.SendMessage("user_1", "user_1&2", "Private hello"));
+
+    const auto messages = service.GetMessagesForAdmin("user_1&2");
+    ASSERT_EQ(messages.size(), 1u);
+    EXPECT_EQ(messages[0].Name, "User_1");
+    EXPECT_EQ(messages[0].Text, "Private hello");
+}
+
+TEST(ChatService, BanUserBlocksLogin) {
+    ChatService service;
+
+    ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
+    ASSERT_TRUE(service.BanUser("user_1", console_chat::core::BanPeriod::OneDay));
+
+    EXPECT_FALSE(service.Authenticate("user_1", "secret"));
+    EXPECT_TRUE(service.IsUserBanned("user_1"));
+
+    ASSERT_TRUE(service.UnbanUser("user_1"));
+    EXPECT_TRUE(service.Authenticate("user_1", "secret"));
+}
+
+TEST(ChatService, ForeverBanDeletesPrivateChats) {
+    ChatService service;
+
+    ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
+    ASSERT_TRUE(service.Register("User_2", "user_2", "secret"));
+    ASSERT_TRUE(service.CreatePrivateChat("user_1", "user_2", "user_1&2"));
+
+    ASSERT_TRUE(service.BanUser("user_1", console_chat::core::BanPeriod::Forever));
+
+    EXPECT_FALSE(Contains(service.GetAllChatNames(), "user_1&2"));
+    EXPECT_TRUE(service.GetMessagesForAdmin("user_1&2").empty());
+}
+
+TEST(ChatService, AdminPrivateChat) {
+    ChatService service;
+
+    ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
+
+    EXPECT_TRUE(service.CreateAdminPrivateChat("user_1", "admin_user_1"));
+    EXPECT_FALSE(service.CreateAdminPrivateChat("user_1", "duplicate_admin_user_1"));
+    EXPECT_TRUE(service.SendAdminMessageToChat("admin_user_1", "Hello from admin"));
+    EXPECT_FALSE(service.SendAdminMessageToChat("missing", "Hello"));
+
+    const auto userChats = service.GetMyChats("user_1");
+    EXPECT_TRUE(Contains(userChats, "admin_user_1"));
+
+    const auto messages = service.GetMessages("user_1", "admin_user_1");
+    ASSERT_EQ(messages.size(), 1u);
+    EXPECT_EQ(messages[0].Name, console_chat::core::ADMIN_MESSAGE_NAME);
+    EXPECT_EQ(messages[0].Text, "Hello from admin");
+}
+
+TEST(ChatService, ImportsAdminPrivateChatWithoutAdminUser) {
+    console_chat::core::ServiceState state;
+    state.Users.push_back({
+        "user_1",
+        "User_1",
+        console_chat::core::PasswordProtector::Hash("secret")});
+
+    console_chat::core::ChatState chat;
+    chat.Name = "admin_user_1";
+    chat.IsPrivate = true;
+    chat.Participants = {console_chat::core::ADMIN_SYSTEM_LOGIN, "user_1"};
+    state.Chats.push_back(std::move(chat));
+
+    ChatService service;
+    ASSERT_TRUE(service.ImportState(std::move(state)));
+    EXPECT_TRUE(Contains(service.GetMyChats("user_1"), "admin_user_1"));
+    EXPECT_TRUE(service.SendAdminMessageToChat("admin_user_1", "Loaded admin chat"));
+}
+
+TEST(ChatService, UsesCustomServiceLimits) {
+    ServiceLimits userLimits;
+    userLimits.MaxUsers = 1;
+    ChatService limitedUsers(userLimits);
+    EXPECT_TRUE(limitedUsers.Register("User_1", "user_1", "secret"));
+    EXPECT_FALSE(limitedUsers.Register("User_2", "user_2", "secret"));
+
+    ServiceLimits chatLimits;
+    chatLimits.MaxChats = 1;
+    ChatService limitedChats(chatLimits);
+    ASSERT_TRUE(limitedChats.Register("User_1", "user_1", "secret"));
+    ASSERT_TRUE(limitedChats.Register("User_2", "user_2", "secret"));
+    EXPECT_FALSE(limitedChats.CreatePrivateChat("user_1", "user_2", "blocked"));
+
+    ServiceLimits messageLimits;
+    messageLimits.MaxMessageLength = 3;
+    messageLimits.MaxMessagesPerChat = 1;
+    ChatService limitedMessages(messageLimits);
+    ASSERT_TRUE(limitedMessages.Register("User_1", "user_1", "secret"));
+    EXPECT_FALSE(limitedMessages.SendMessage("user_1", GENERAL_CHAT_NAME, "long"));
+    EXPECT_TRUE(limitedMessages.SendMessage("user_1", GENERAL_CHAT_NAME, "one"));
+    EXPECT_FALSE(limitedMessages.SendMessage("user_1", GENERAL_CHAT_NAME, "two"));
 }
 
 TEST(ChatService, PrivateLimit) {
@@ -273,8 +441,10 @@ TEST_F(ChatServiceState, SaveLoad) {
     ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
     ASSERT_TRUE(service.Register("User_2", "user_2", "password"));
     ASSERT_TRUE(service.CreatePrivateChat("user_1", "user_2", "user_1&2"));
+    ASSERT_TRUE(service.CreatePrivateChat("user_1", "user_1", "user_1_self"));
     ASSERT_TRUE(service.SendMessage("user_1", GENERAL_CHAT_NAME, "Hello general"));
     ASSERT_TRUE(service.SendMessage("user_1", "user_1&2", "Hello User_2"));
+    ASSERT_TRUE(service.SendMessage("user_1", "user_1_self", "Saved self note"));
 
     FileManager loadedStorage(usersFile.string(), chatsFile.string());
     ChatService loaded(loadedStorage);
@@ -297,6 +467,11 @@ TEST_F(ChatServiceState, SaveLoad) {
     ASSERT_EQ(privateMessages.size(), 1u);
     EXPECT_EQ(privateMessages[0].Name, "User_1");
     EXPECT_EQ(privateMessages[0].Text, "Hello User_2");
+
+    const auto selfMessages = loaded.GetMessages("user_1", "user_1_self");
+    ASSERT_EQ(selfMessages.size(), 1u);
+    EXPECT_EQ(selfMessages[0].Name, "User_1");
+    EXPECT_EQ(selfMessages[0].Text, "Saved self note");
 }
 
 TEST_F(ChatServiceState, InvalidLoad) {

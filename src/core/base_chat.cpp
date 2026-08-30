@@ -3,6 +3,10 @@
 
 namespace console_chat::core {
 
+BaseChat::BaseChat(const size_t maxMessages)
+    : m_maxMessages(maxMessages)
+{}
+
 bool BaseChat::IsParticipant(const std::string&) const {
     return true;
 }
@@ -12,7 +16,7 @@ bool BaseChat::IsPrivate() const {
 }
 
 bool BaseChat::AddMessage(Message&& msg) {
-    if (m_messages.size() >= MAX_MESSAGES_PER_CHAT) {
+    if (m_messages.size() >= m_maxMessages) {
         return false;
     }
 

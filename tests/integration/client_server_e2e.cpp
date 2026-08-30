@@ -182,6 +182,7 @@ TEST_F(ClientServerE2E, GeneralChat) {
         ASSERT_TRUE(user2.Authenticate("user_2", "secret"));
 
         EXPECT_TRUE(user1.IsAuthenticated());
+        EXPECT_EQ(user1.GetCurrentUserLogin(), "user_1");
         EXPECT_EQ(user1.GetCurrentUserName(), "User_1");
         EXPECT_EQ(user1.GetMyChats(), (std::vector<std::string>{GENERAL_CHAT_NAME}));
 

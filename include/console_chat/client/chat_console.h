@@ -13,12 +13,15 @@ public:
         : m_service(service) {}
 
     int Run();
+    int RunAdmin();
 
 private:
     void UserMenu();
+    void AdminMenu();
 
     void RegistrationFlow();
     void LoginFlow();
+    void AdminLoginFlow();
 
     void CreatePrivateChatFlow();
 
@@ -29,8 +32,20 @@ private:
     void ShowMyChatsFlow() const;
     void ShowAllUsersFlow() const;
 
+    void AdminShowUsersFlow() const;
+    void AdminShowChatsFlow() const;
+    void AdminCreatePrivateChatFlow();
+    void AdminOpenPrivateChatFlow();
+    void AdminOpenGeneralChatFlow();
+    void AdminChatSession(const std::string& chatName, bool canSend);
+    void AdminKickUserFlow();
+    void AdminBanUserFlow();
+    void AdminUnbanUserFlow();
+
     void ShowMainMenu() const;
     void ShowUserMenu() const;
+    void ShowAdminMainMenu() const;
+    void ShowAdminMenu() const;
 
 private:
     enum class ActionMainMenu : int {
@@ -46,6 +61,23 @@ private:
         OPEN_PRIVATE_CHAT = 3,
         OPEN_GENERAL_CHAT = 4,
         SHOW_ALL_USERS = 5
+    };
+
+    enum class ActionAdminMainMenu : int {
+        EXIT = 0,
+        LOGIN = 1
+    };
+
+    enum class ActionAdminMenu : int {
+        LOG_OUT = 0,
+        SHOW_USERS = 1,
+        SHOW_CHATS = 2,
+        CREATE_PRIVATE_CHAT = 3,
+        OPEN_PRIVATE_CHAT = 4,
+        OPEN_GENERAL_CHAT = 5,
+        KICK_USER = 6,
+        BAN_USER = 7,
+        UNBAN_USER = 8
     };
 
 private:

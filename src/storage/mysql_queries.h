@@ -8,9 +8,10 @@ namespace console_chat::storage::mysql_queries {
 inline constexpr std::string_view START_TRANSACTION = "START TRANSACTION";
 
 inline constexpr std::string_view SELECT_USERS =
-    "SELECT u.login, u.name, p.password_hash "
+    "SELECT u.login, u.name, p.password_hash, u.banned_until_epoch, u.banned_forever "
     "FROM users AS u "
     "JOIN users_passwords AS p ON p.user_id = u.id "
+    "WHERE u.login <> '__admin__' "
     "ORDER BY u.id";
 
 inline constexpr std::string_view SELECT_CHATS =
@@ -53,6 +54,37 @@ inline constexpr std::string_view INSERT_MESSAGE =
     "OR sender.id IN (chat.first_user_id, chat.second_user_id)) "
     "AND (SELECT COUNT(*) FROM messages AS existing "
     "WHERE existing.chat_id = chat.id) < ?";
+
+inline constexpr std::string_view INSERT_ADMIN_USER =
+    "INSERT INTO users (name, login) VALUES ('ADMIN', '__admin__') "
+    "ON DUPLICATE KEY UPDATE name = VALUES(name)";
+
+inline constexpr std::string_view INSERT_ADMIN_MESSAGE =
+    "INSERT INTO messages (message_text, chat_id, sender_id) "
+    "SELECT ?, chat.id, sender.id "
+    "FROM chats AS chat "
+    "CROSS JOIN users AS sender "
+    "WHERE chat.chat_name = ? "
+    "AND sender.login = '__admin__' "
+    "AND ((chat.first_user_id IS NULL AND chat.second_user_id IS NULL) "
+    "OR sender.id IN (chat.first_user_id, chat.second_user_id)) "
+    "AND (SELECT COUNT(*) FROM messages AS existing "
+    "WHERE existing.chat_id = chat.id) < ?";
+
+inline constexpr std::string_view UPDATE_USER_BAN =
+    "UPDATE users SET banned_until_epoch = ?, banned_forever = ? "
+    "WHERE login = ? AND login <> '__admin__'";
+
+inline constexpr std::string_view DELETE_MESSAGES_FOR_PRIVATE_CHATS_WITH_USER =
+    "DELETE m FROM messages AS m "
+    "JOIN chats AS c ON c.id = m.chat_id "
+    "JOIN users AS u ON u.login = ? "
+    "WHERE c.first_user_id = u.id OR c.second_user_id = u.id";
+
+inline constexpr std::string_view DELETE_PRIVATE_CHATS_WITH_USER =
+    "DELETE c FROM chats AS c "
+    "JOIN users AS u ON u.login = ? "
+    "WHERE c.first_user_id = u.id OR c.second_user_id = u.id";
 
 inline constexpr std::string_view DELETE_MESSAGES = "DELETE FROM messages";
 inline constexpr std::string_view DELETE_CHATS = "DELETE FROM chats";

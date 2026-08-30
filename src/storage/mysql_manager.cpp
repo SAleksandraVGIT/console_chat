@@ -1,9 +1,11 @@
 #include "console_chat/storage/mysql_manager.h"
 
+#include "console_chat/core/chat_service.h"
 #include "mysql_queries.h"
 
 #include <charconv>
 #include <cctype>
+#include <exception>
 #include <fstream>
 #include <limits>
 #include <memory>
@@ -76,6 +78,11 @@ void BindUnsignedLongLong(MYSQL_BIND& binding, unsigned long long& value) {
     binding.buffer_type = MYSQL_TYPE_LONGLONG;
     binding.buffer = &value;
     binding.is_unsigned = true;
+}
+
+void BindLongLong(MYSQL_BIND& binding, long long& value) {
+    binding.buffer_type = MYSQL_TYPE_LONGLONG;
+    binding.buffer = &value;
 }
 
 bool ExecuteStatement(
@@ -434,15 +441,27 @@ bool MySQLManager::Load(core::ServiceState& state) {
     MYSQL_ROW row = nullptr;
     while ((row = mysql_fetch_row(usersResult.get()))) {
         const unsigned long* lengths = mysql_fetch_lengths(usersResult.get());
-        if (!lengths || !row[0] || !row[1] || !row[2]) {
+        if (!lengths || !row[0] || !row[1] || !row[2] || !row[3] || !row[4]) {
             m_lastError = "MySQL returned an invalid user row";
+            return false;
+        }
+
+        std::int64_t bannedUntilEpoch = 0;
+        int bannedForever = 0;
+        try {
+            bannedUntilEpoch = std::stoll(ReadColumn(row, lengths, 3));
+            bannedForever = std::stoi(ReadColumn(row, lengths, 4));
+        } catch (const std::exception&) {
+            m_lastError = "MySQL returned invalid user ban values";
             return false;
         }
 
         loaded.Users.push_back(core::UserState{
             ReadColumn(row, lengths, 0),
             ReadColumn(row, lengths, 1),
-            ReadColumn(row, lengths, 2)});
+            ReadColumn(row, lengths, 2),
+            bannedUntilEpoch,
+            bannedForever != 0});
     }
 
     if (mysql_errno(m_connection.get()) != 0) {
@@ -581,11 +600,31 @@ bool MySQLManager::AddChat(const core::ChatState& chat) {
             m_lastError) != nullptr;
     }
 
-    if (chat.Participants[0].empty() || chat.Participants[1].empty() ||
-        chat.Participants[0] == chat.Participants[1])
+    if (chat.Participants[0].empty() || chat.Participants[1].empty())
     {
         m_lastError = "Private chat participants are invalid";
         return false;
+    }
+
+    const bool hasAdminParticipant =
+        chat.Participants[0] == core::ADMIN_SYSTEM_LOGIN ||
+        chat.Participants[1] == core::ADMIN_SYSTEM_LOGIN;
+
+    std::unique_ptr<Transaction> transaction;
+    if (hasAdminParticipant) {
+        transaction = std::make_unique<Transaction>(m_connection.get(), m_lastError);
+        if (!transaction->IsActive()) {
+            return false;
+        }
+
+        if (!ExecutePrepared(
+                m_connection.get(),
+                Sql::INSERT_ADMIN_USER,
+                nullptr,
+                m_lastError))
+        {
+            return false;
+        }
     }
 
     MYSQL_BIND bindings[3]{};
@@ -606,13 +645,14 @@ bool MySQLManager::AddChat(const core::ChatState& chat) {
         return false;
     }
 
-    return true;
+    return !transaction || transaction->Commit(m_lastError);
 }
 
 bool MySQLManager::AddMessage(
     const std::string& chatName,
     const std::string& senderLogin,
-    const core::Message& message)
+    const core::Message& message,
+    const size_t maxMessagesPerChat)
 {
     m_lastError.clear();
     if (!EnsureInitialized()) {
@@ -623,7 +663,7 @@ bool MySQLManager::AddMessage(
     unsigned long messageLength = 0;
     unsigned long chatNameLength = 0;
     unsigned long senderLoginLength = 0;
-    unsigned long long messageLimit = core::MAX_MESSAGES_PER_CHAT;
+    unsigned long long messageLimit = maxMessagesPerChat;
     BindString(bindings[0], message.Text, messageLength);
     BindString(bindings[1], chatName, chatNameLength);
     BindString(bindings[2], senderLogin, senderLoginLength);
@@ -642,6 +682,122 @@ bool MySQLManager::AddMessage(
     }
 
     return true;
+}
+
+bool MySQLManager::AddAdminMessage(
+    const std::string& chatName,
+    const core::Message& message,
+    const size_t maxMessagesPerChat)
+{
+    m_lastError.clear();
+    if (!EnsureInitialized()) {
+        return false;
+    }
+
+    Transaction transaction(m_connection.get(), m_lastError);
+    if (!transaction.IsActive()) {
+        return false;
+    }
+
+    if (!ExecutePrepared(
+            m_connection.get(),
+            Sql::INSERT_ADMIN_USER,
+            nullptr,
+            m_lastError))
+    {
+        return false;
+    }
+
+    MYSQL_BIND bindings[3]{};
+    unsigned long messageLength = 0;
+    unsigned long chatNameLength = 0;
+    unsigned long long messageLimit = maxMessagesPerChat;
+    BindString(bindings[0], message.Text, messageLength);
+    BindString(bindings[1], chatName, chatNameLength);
+    BindUnsignedLongLong(bindings[2], messageLimit);
+
+    auto statement = ExecutePrepared(
+        m_connection.get(), Sql::INSERT_ADMIN_MESSAGE, bindings, m_lastError);
+    if (!statement) {
+        return false;
+    }
+
+    if (mysql_stmt_affected_rows(statement.get()) != 1) {
+        m_lastError = "Admin message chat was not found or the limit was reached";
+        return false;
+    }
+
+    return transaction.Commit(m_lastError);
+}
+
+bool MySQLManager::UpdateUserBan(
+    const std::string& login,
+    const std::int64_t bannedUntilEpoch,
+    const bool bannedForever)
+{
+    m_lastError.clear();
+    if (!EnsureInitialized()) {
+        return false;
+    }
+
+    MYSQL_BIND bindings[3]{};
+    long long signedUntil = static_cast<long long>(bannedUntilEpoch);
+    long long signedForever = bannedForever ? 1 : 0;
+    unsigned long loginLength = 0;
+    BindLongLong(bindings[0], signedUntil);
+    BindLongLong(bindings[1], signedForever);
+    BindString(bindings[2], login, loginLength);
+
+    auto statement = ExecutePrepared(
+        m_connection.get(), Sql::UPDATE_USER_BAN, bindings, m_lastError);
+    if (!statement) {
+        return false;
+    }
+
+    if (mysql_stmt_affected_rows(statement.get()) > 1) {
+        m_lastError = "Unexpected number of users updated";
+        return false;
+    }
+
+    return true;
+}
+
+bool MySQLManager::DeletePrivateChatsWithUser(const std::string& login) {
+    m_lastError.clear();
+    if (!EnsureInitialized()) {
+        return false;
+    }
+
+    Transaction transaction(m_connection.get(), m_lastError);
+    if (!transaction.IsActive()) {
+        return false;
+    }
+
+    MYSQL_BIND messageBindings[1]{};
+    unsigned long messageLoginLength = 0;
+    BindString(messageBindings[0], login, messageLoginLength);
+    if (!ExecutePrepared(
+            m_connection.get(),
+            Sql::DELETE_MESSAGES_FOR_PRIVATE_CHATS_WITH_USER,
+            messageBindings,
+            m_lastError))
+    {
+        return false;
+    }
+
+    MYSQL_BIND chatBindings[1]{};
+    unsigned long chatLoginLength = 0;
+    BindString(chatBindings[0], login, chatLoginLength);
+    if (!ExecutePrepared(
+            m_connection.get(),
+            Sql::DELETE_PRIVATE_CHATS_WITH_USER,
+            chatBindings,
+            m_lastError))
+    {
+        return false;
+    }
+
+    return transaction.Commit(m_lastError);
 }
 
 bool MySQLManager::Reset() {
