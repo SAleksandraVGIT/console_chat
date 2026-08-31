@@ -45,6 +45,7 @@ public:
     bool Authenticate(const std::string& login, const std::string& password);
     AuthResult AuthenticateDetailed(const std::string& login, const std::string& password);
     void Logout();
+    bool DeleteAccount(const std::string& confirmationLogin);
 
     bool IsAuthenticated() const;
 
@@ -75,6 +76,7 @@ public:
     bool AdminKickUser(const std::string& login);
     bool AdminBanUser(const std::string& login, const std::string& period);
     bool AdminUnbanUser(const std::string& login);
+    int AdminDeleteForeverBannedUsers();
 
 private:
     std::vector<std::string> Request(const std::vector<std::string>& parts) const;

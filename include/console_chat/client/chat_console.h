@@ -24,6 +24,7 @@ private:
     void AdminLoginFlow();
 
     void CreatePrivateChatFlow();
+    bool DeleteAccountFlow();
 
     void OpenChatFlow();
     void OpenGeneralChatFlow();
@@ -41,6 +42,7 @@ private:
     void AdminKickUserFlow();
     void AdminBanUserFlow();
     void AdminUnbanUserFlow();
+    void AdminDeleteForeverBannedUsersFlow();
 
     void ShowMainMenu() const;
     void ShowUserMenu() const;
@@ -60,7 +62,8 @@ private:
         CREATE_PRIVATE_CHAT = 2,
         OPEN_PRIVATE_CHAT = 3,
         OPEN_GENERAL_CHAT = 4,
-        SHOW_ALL_USERS = 5
+        SHOW_ALL_USERS = 5,
+        DELETE_ACCOUNT = 6
     };
 
     enum class ActionAdminMainMenu : int {
@@ -77,7 +80,8 @@ private:
         OPEN_GENERAL_CHAT = 5,
         KICK_USER = 6,
         BAN_USER = 7,
-        UNBAN_USER = 8
+        UNBAN_USER = 8,
+        DELETE_FOREVER_BANNED_USERS = 9
     };
 
 private:

@@ -82,6 +82,8 @@ package "Core service" {
     +BanUser(login, period) : bool
     +UnbanUser(login) : bool
     +IsUserBanned(login) : bool
+    +DeleteUserAccount(login) : bool
+    +DeleteForeverBannedUsers(deletedCount) : bool
     +ImportState(state) : bool
     -FindUser(login) : UserPtr
     -FindChat(name) : BaseChatPtr
@@ -179,6 +181,7 @@ package "Storage" {
     +AddAdminMessage(chatName, message, maxMessagesPerChat) : bool
     +UpdateUserBan(login, bannedUntilEpoch, bannedForever) : bool
     +DeletePrivateChatsWithUser(login) : bool
+    +DeleteUser(login) : bool
     +Reset() : bool
   }
 
@@ -243,12 +246,13 @@ note right of RequestRouter
   Supported commands:
   REGISTER, LOGIN, LOGOUT, IS_AUTH,
   CUR_USER, CUR_LOGIN, GET_MY_CHATS, CREATE_PRIVATE,
-  GET_MESSAGES, SEND_MESSAGE, GET_ALL_USERS,
+  DELETE_ACCOUNT, GET_MESSAGES, SEND_MESSAGE, GET_ALL_USERS,
   ADMIN_LOGIN, ADMIN_GET_USERS,
   ADMIN_GET_CHATS, ADMIN_CREATE_PRIVATE,
   ADMIN_GET_MESSAGES, ADMIN_SEND_CHAT,
   ADMIN_SEND_GENERAL, ADMIN_KICK_USER,
-  ADMIN_BAN_USER, ADMIN_UNBAN_USER
+  ADMIN_BAN_USER, ADMIN_UNBAN_USER,
+  ADMIN_DELETE_FOREVER_BANNED_USERS
 end note
 
 note right of Session
@@ -269,7 +273,7 @@ note right of ChatService
   Server can override them via server.conf.
   - admin messages use visible name ADMIN
   - admin private chats use hidden login __admin__
-  - forever ban deletes private user chats
+  - forever ban is cleaned up by separate admin command
 end note
 
 note bottom of PasswordProtector
@@ -313,8 +317,8 @@ group shared service mutex locked
       Chat --> Service : result
     end
 
-    opt registration, chat creation, message, ban or private cleanup
-      Service -> State : AddUser / AddChat / AddMessage / UpdateUserBan / DeletePrivateChatsWithUser
+    opt registration, chat creation, message, ban, account deletion or private cleanup
+      Service -> State : AddUser / AddChat / AddMessage / UpdateUserBan / DeletePrivateChatsWithUser / DeleteUser
       State --> Service : write result
       Service -> Service : update memory after success
     end

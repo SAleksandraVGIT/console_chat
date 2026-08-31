@@ -800,6 +800,85 @@ bool MySQLManager::DeletePrivateChatsWithUser(const std::string& login) {
     return transaction.Commit(m_lastError);
 }
 
+bool MySQLManager::DeleteUser(const std::string& login) {
+    m_lastError.clear();
+    if (!EnsureInitialized() || login == core::ADMIN_SYSTEM_LOGIN) {
+        return false;
+    }
+
+    Transaction transaction(m_connection.get(), m_lastError);
+    if (!transaction.IsActive()) {
+        return false;
+    }
+
+    MYSQL_BIND privateMessageBindings[1]{};
+    unsigned long privateMessageLoginLength = 0;
+    BindString(privateMessageBindings[0], login, privateMessageLoginLength);
+    if (!ExecutePrepared(
+            m_connection.get(),
+            Sql::DELETE_MESSAGES_FOR_PRIVATE_CHATS_WITH_USER,
+            privateMessageBindings,
+            m_lastError))
+    {
+        return false;
+    }
+
+    MYSQL_BIND privateChatBindings[1]{};
+    unsigned long privateChatLoginLength = 0;
+    BindString(privateChatBindings[0], login, privateChatLoginLength);
+    if (!ExecutePrepared(
+            m_connection.get(),
+            Sql::DELETE_PRIVATE_CHATS_WITH_USER,
+            privateChatBindings,
+            m_lastError))
+    {
+        return false;
+    }
+
+    MYSQL_BIND messageBindings[1]{};
+    unsigned long messageLoginLength = 0;
+    BindString(messageBindings[0], login, messageLoginLength);
+    if (!ExecutePrepared(
+            m_connection.get(),
+            Sql::DELETE_MESSAGES_BY_USER,
+            messageBindings,
+            m_lastError))
+    {
+        return false;
+    }
+
+    MYSQL_BIND passwordBindings[1]{};
+    unsigned long passwordLoginLength = 0;
+    BindString(passwordBindings[0], login, passwordLoginLength);
+    if (!ExecutePrepared(
+            m_connection.get(),
+            Sql::DELETE_PASSWORD_BY_USER,
+            passwordBindings,
+            m_lastError))
+    {
+        return false;
+    }
+
+    MYSQL_BIND userBindings[1]{};
+    unsigned long userLoginLength = 0;
+    BindString(userBindings[0], login, userLoginLength);
+    auto statement = ExecutePrepared(
+        m_connection.get(),
+        Sql::DELETE_USER_BY_LOGIN,
+        userBindings,
+        m_lastError);
+    if (!statement) {
+        return false;
+    }
+
+    if (mysql_stmt_affected_rows(statement.get()) != 1) {
+        m_lastError = "User was not found";
+        return false;
+    }
+
+    return transaction.Commit(m_lastError);
+}
+
 bool MySQLManager::Reset() {
     m_lastError.clear();
     if (!m_initialized && !Initialize()) {

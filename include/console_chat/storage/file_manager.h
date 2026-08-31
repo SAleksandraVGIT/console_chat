@@ -32,6 +32,7 @@ public:
         std::int64_t bannedUntilEpoch,
         bool bannedForever) override;
     bool DeletePrivateChatsWithUser(const std::string& login) override;
+    bool DeleteUser(const std::string& login) override;
 
     bool Reset() override;
 

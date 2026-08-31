@@ -436,6 +436,41 @@ bool FileManager::DeletePrivateChatsWithUser(const std::string& login) {
     return true;
 }
 
+bool FileManager::DeleteUser(const std::string& login) {
+    if (!m_initialized || login == core::ADMIN_SYSTEM_LOGIN) {
+        return false;
+    }
+
+    auto updated = m_state;
+    const auto userEnd = std::remove_if(
+        updated.Users.begin(),
+        updated.Users.end(),
+        [&login](const core::UserState& user) {
+            return user.Login == login;
+        });
+
+    if (userEnd == updated.Users.end()) {
+        return false;
+    }
+
+    updated.Users.erase(userEnd, updated.Users.end());
+    const auto chatEnd = std::remove_if(
+        updated.Chats.begin(),
+        updated.Chats.end(),
+        [&login](const core::ChatState& chat) {
+            return chat.IsPrivate &&
+                (chat.Participants[0] == login || chat.Participants[1] == login);
+        });
+    updated.Chats.erase(chatEnd, updated.Chats.end());
+
+    if (!WriteState(updated)) {
+        return false;
+    }
+
+    m_state = std::move(updated);
+    return true;
+}
+
 bool FileManager::Reset() {
     std::error_code usersError;
     std::error_code chatsError;

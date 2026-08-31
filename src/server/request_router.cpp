@@ -104,6 +104,24 @@ std::vector<std::string> HandleRequest(
         return {"OK"};
     }
 
+    if (cmd == "DELETE_ACCOUNT" && req.size() == 2) {
+        if (context.isAdmin || context.currentLogin.empty()) {
+            return {"ERR", "access denied"};
+        }
+
+        if (req[1] != context.currentLogin) {
+            return {"ERR", "confirmation mismatch"};
+        }
+
+        const bool ok = service.DeleteUserAccount(context.currentLogin);
+        if (ok) {
+            context.currentLogin.clear();
+        }
+        return ok
+            ? std::vector<std::string>{"OK"}
+            : std::vector<std::string>{"ERR", "delete account failed"};
+    }
+
     if (cmd == "IS_AUTH" && req.size() == 1) {
         return {"OK", (context.currentLogin.empty() && !context.isAdmin) ? "0" : "1"};
     }
@@ -271,6 +289,18 @@ std::vector<std::string> HandleRequest(
 
         const bool ok = service.UnbanUser(req[1]);
         return ok ? std::vector<std::string>{"OK"} : std::vector<std::string>{"ERR", "unban failed"};
+    }
+
+    if (cmd == "ADMIN_DELETE_FOREVER_BANNED_USERS" && req.size() == 1) {
+        if (!RequireAdmin(context)) {
+            return {"ERR", "access denied"};
+        }
+
+        size_t deletedCount = 0;
+        const bool ok = service.DeleteForeverBannedUsers(deletedCount);
+        return ok
+            ? std::vector<std::string>{"OK", std::to_string(deletedCount)}
+            : std::vector<std::string>{"ERR", "delete forever banned users failed"};
     }
 
     return {"ERR", "bad request"};

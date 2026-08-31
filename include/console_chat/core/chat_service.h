@@ -74,6 +74,8 @@ public:
     bool BanUser(const std::string& login, BanPeriod period);
     bool UnbanUser(const std::string& login);
     bool IsUserBanned(const std::string& login) const;
+    bool DeleteUserAccount(const std::string& login);
+    bool DeleteForeverBannedUsers(size_t& deletedCount);
 
     bool ImportState(ServiceState state);
 
@@ -94,6 +96,7 @@ private:
         std::int64_t bannedUntilEpoch,
         bool bannedForever);
     bool PersistDeletePrivateChatsWithUser(const std::string& login);
+    bool PersistDeleteUser(const std::string& login);
 
 private:
     std::unordered_map<std::string, std::unique_ptr<User>> m_users;

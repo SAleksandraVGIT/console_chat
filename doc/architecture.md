@@ -52,6 +52,8 @@
     - создание приватного чата администратора с любым пользователем (`CreateAdminPrivateChat`);
     - отправка сообщения от `ADMIN` в админские приватные чаты (`SendAdminMessageToChat`);
     - бан и досрочный разбан пользователей (`BanUser`, `UnbanUser`);
+    - удаление своего аккаунта пользователем (`DeleteUserAccount`);
+    - отдельное удаление всех аккаунтов с вечным баном (`DeleteForeverBannedUsers`);
     - загрузка начального состояния (`Initialize`, `ImportState`);
     - точечное сохранение пользователя, чата или сообщения через `IManager` до изменения памяти.
   - хранит:
@@ -76,7 +78,8 @@
   - `AddMessage` сохраняет одно сообщение и получает логин автора для будущего внешнего ключа;
   - `AddAdminMessage` сохраняет сообщение администратора в общем или admin-private чате;
   - `UpdateUserBan` сохраняет временный или вечный бан пользователя;
-  - `DeletePrivateChatsWithUser` удаляет приватные чаты пользователя при вечном бане;
+  - `DeletePrivateChatsWithUser` удаляет приватные чаты пользователя;
+  - `DeleteUser` удаляет пользователя и связанные с ним приватные чаты;
   - `Reset` очищает хранилище.
 - `FileManager`
   - поддерживает снимок `ServiceState` в памяти;
@@ -97,6 +100,7 @@
   - при создании admin-private чата MySQL создаёт `__admin__`, если его ещё нет;
   - `UpdateUserBan` обновляет поля `banned_until_epoch` и `banned_forever`;
   - `DeletePrivateChatsWithUser` удаляет сообщения и приватные чаты с участием пользователя;
+  - `DeleteUser` удаляет приватные чаты пользователя, его сообщения, пароль и сам аккаунт;
   - `Reset` очищает таблицы в транзакции с учётом внешних ключей.
 
 Локальная конфигурация `config/mysql.conf` создаётся скриптом `scripts/setup_mysql.sh`,
@@ -115,13 +119,14 @@
     - отправляет запросы на сервер;
     - получает и разбирает ответы.
   - предоставляет API для `ChatConsole`:
-    - `Register`, `Authenticate`, `Logout`;
+    - `Register`, `Authenticate`, `Logout`, `DeleteAccount`;
     - `AuthenticateDetailed` для получения причины бана и серверного времени;
     - `GetMyChats`, `GetMessages`, `SendMessage`;
     - `GetAllUserLogins`, `GetCurrentUserLogin`, `GetCurrentUserName`, `IsAuthenticated`;
     - админские методы `AdminLogin`, `AdminGetUsers`, `AdminGetChats`,
       `AdminCreatePrivateChat`, `AdminGetMessages`, `AdminSendMessageToChat`,
-      `AdminSendGeneral`, `AdminKickUser`, `AdminBanUser`, `AdminUnbanUser`.
+      `AdminSendGeneral`, `AdminKickUser`, `AdminBanUser`, `AdminUnbanUser`,
+      `AdminDeleteForeverBannedUsers`.
 
 - `ChatConsole` (`include/console_chat/client/chat_console.h`, `src/client/chat_console.cpp`)
   - консольный UI:
@@ -130,6 +135,7 @@
     - сценарии регистрации/входа;
     - сценарий админского входа;
     - открытие общего и приватных чатов;
+    - удаление своего аккаунта с подтверждением текущего login;
     - отправка сообщений и вывод истории;
     - админский просмотр всех пользователей и всех чатов, отдельное открытие `GENERAL`
       и полной истории любого открытого чата;
@@ -180,6 +186,7 @@
 - `LOGIN`;
 - `LOGOUT`;
 - `CUR_LOGIN`;
+- `DELETE_ACCOUNT`;
 - `GET_MY_CHATS`;
 - `GET_MESSAGES`;
 - `SEND_MESSAGE`;
@@ -192,7 +199,8 @@
 - `ADMIN_SEND_GENERAL`;
 - `ADMIN_KICK_USER`;
 - `ADMIN_BAN_USER`;
-- `ADMIN_UNBAN_USER`.
+- `ADMIN_UNBAN_USER`;
+- `ADMIN_DELETE_FOREVER_BANNED_USERS`.
 
 Ответ на вход забаненного пользователя:
 
@@ -211,6 +219,10 @@
 командой клиента через `ADMIN_GET_MESSAGES GENERAL`.
 `CUR_LOGIN` используется клиентским меню, чтобы пометить текущего пользователя в списке
 логинов как `(You)`.
+`DELETE_ACCOUNT <login>` удаляет аккаунт текущего пользователя только если переданный login
+совпадает с login в сессии; после успешного удаления сессия разлогинивается.
+`ADMIN_DELETE_FOREVER_BANNED_USERS` удаляет все аккаунты, у которых стоит вечный бан, и
+возвращает количество удалённых пользователей.
 При `ADMIN_KICK_USER` сервер отправляет служебный ответ `ERR disconnected by ADMIN` и закрывает
 сокет. Из-за синхронного протокола клиент показывает это сообщение при следующем запросе к
 серверу. После настроенного idle-timeout сетевой неактивности сервер отправляет
@@ -254,7 +266,8 @@ max_messages_per_chat=1000
 - При обычном запуске сервер пытается загрузить предыдущее состояние.
 - При запуске с `--reset-state` сервер очищает файлы состояния и стартует с пустым состоянием.
 - Пользователь хранит поля `BannedUntilEpoch` и `BannedForever`.
-- При вечном бане удаляются все приватные чаты с участием пользователя.
+- Вечный бан только запрещает вход пользователя; удаление аккаунтов с вечным баном выполняется
+  отдельной админской командой.
 - Для MySQL после обновления старой базы требуется миграция `database/migrate_admin_bans.sql`.
 
 ## Диаграммы

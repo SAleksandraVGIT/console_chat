@@ -24,6 +24,7 @@ package "Client application (console_chat)" {
     -LoginFlow()
     -AdminLoginFlow()
     -CreatePrivateChatFlow()
+    -DeleteAccountFlow()
     -OpenChatFlow()
     -OpenGeneralChatFlow()
     -ChatSession(chatName)
@@ -38,6 +39,7 @@ package "Client application (console_chat)" {
     -AdminKickUserFlow()
     -AdminBanUserFlow()
     -AdminUnbanUserFlow()
+    -AdminDeleteForeverBannedUsersFlow()
     -ShowMainMenu()
     -ShowUserMenu()
     -ShowAdminMainMenu()
@@ -52,6 +54,7 @@ package "Client application (console_chat)" {
     +Authenticate(login, password) : bool
     +AuthenticateDetailed(login, password) : AuthResult
     +Logout()
+    +DeleteAccount(confirmationLogin) : bool
     +IsAuthenticated() : bool
     +GetCurrentUserLogin() : string
     +GetCurrentUserName() : string
@@ -72,6 +75,7 @@ package "Client application (console_chat)" {
     +AdminKickUser(login) : bool
     +AdminBanUser(login, period) : bool
     +AdminUnbanUser(login) : bool
+    +AdminDeleteForeverBannedUsers() : int
     -Request(parts) : vector<string>
     -{static} Split(line, delim) : vector<string>
     -m_socket : TcpSocket
@@ -90,6 +94,7 @@ package "Client application (console_chat)" {
     OPEN_PRIVATE_CHAT = 3
     OPEN_GENERAL_CHAT = 4
     SHOW_ALL_USERS = 5
+    DELETE_ACCOUNT = 6
   }
 
   enum ActionAdminMainMenu {
@@ -107,6 +112,7 @@ package "Client application (console_chat)" {
     KICK_USER = 6
     BAN_USER = 7
     UNBAN_USER = 8
+    DELETE_FOREVER_BANNED_USERS = 9
   }
 }
 

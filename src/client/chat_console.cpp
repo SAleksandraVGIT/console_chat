@@ -262,6 +262,12 @@ void ChatConsole::UserMenu() {
                 ShowAllUsersFlow();
                 break;
 
+            case ActionUserMenu::DELETE_ACCOUNT:
+                if (DeleteAccountFlow()) {
+                    inSession = false;
+                }
+                break;
+
             default:
                 std::cout << "Invalid input.\n";
                 break;
@@ -314,6 +320,10 @@ void ChatConsole::AdminMenu() {
 
             case ActionAdminMenu::UNBAN_USER:
                 AdminUnbanUserFlow();
+                break;
+
+            case ActionAdminMenu::DELETE_FOREVER_BANNED_USERS:
+                AdminDeleteForeverBannedUsersFlow();
                 break;
 
             default:
@@ -440,6 +450,35 @@ void ChatConsole::CreatePrivateChatFlow()
     } else {
         std::cout << "Failed to create private chat.\n";
     }
+}
+
+bool ChatConsole::DeleteAccountFlow() {
+    const auto currentLogin = m_service.GetCurrentUserLogin();
+    if (currentLogin.empty()) {
+        std::cout << "Account deletion failed.\n";
+        return false;
+    }
+
+    std::cout << "\n==== DELETE ACCOUNT ====\n"
+              << "Enter your login to confirm account deletion (\"/0\" to cancel): ";
+
+    const std::string confirmation = ReadLine();
+    if (confirmation == "/0") {
+        return false;
+    }
+
+    if (confirmation != currentLogin) {
+        std::cout << "Confirmation does not match current login.\n";
+        return false;
+    }
+
+    if (!m_service.DeleteAccount(confirmation)) {
+        std::cout << "Account deletion failed.\n";
+        return false;
+    }
+
+    std::cout << "Account deleted.\n";
+    return true;
 }
 
 void ChatConsole::ChatSession(const std::string& chatName)
@@ -787,6 +826,47 @@ void ChatConsole::AdminUnbanUserFlow() {
     std::cout << (success ? "User unbanned.\n" : "Failed to unban user.\n");
 }
 
+void ChatConsole::AdminDeleteForeverBannedUsersFlow() {
+    const auto users = m_service.AdminGetUsers();
+    std::vector<AdminUserInfo> foreverBannedUsers;
+    std::copy_if(
+        users.begin(),
+        users.end(),
+        std::back_inserter(foreverBannedUsers),
+        [](const AdminUserInfo& user) {
+            return user.BanStatus == "FOREVER";
+        });
+
+    if (foreverBannedUsers.empty()) {
+        std::cout << "Forever banned users not found.\n";
+        return;
+    }
+
+    std::cout << "\n==== FOREVER BANNED USERS ====\n";
+    for (const auto& user : foreverBannedUsers) {
+        std::cout << "- " << user.Login << " (" << user.Name << ")\n";
+    }
+
+    std::cout << "Enter DELETE to remove these accounts (\"/0\" to cancel): ";
+    const std::string confirmation = ReadLine();
+    if (confirmation == "/0") {
+        return;
+    }
+
+    if (confirmation != "DELETE") {
+        std::cout << "Confirmation does not match DELETE.\n";
+        return;
+    }
+
+    const int deletedCount = m_service.AdminDeleteForeverBannedUsers();
+    if (deletedCount < 0) {
+        std::cout << "Failed to delete forever banned users.\n";
+        return;
+    }
+
+    std::cout << "Deleted accounts: " << deletedCount << ".\n";
+}
+
 void ChatConsole::ShowMainMenu() const {
     std::cout << "\n==== MAIN MENU ====\n"
               << "0 - Exit\n"
@@ -807,7 +887,8 @@ void ChatConsole::ShowUserMenu() const {
               << "2 - Create private chat\n"
               << "3 - Open private chat\n"
               << "4 - Open general chat\n"
-              << "5 - Get list of user\n";
+              << "5 - Get list of user\n"
+              << "6 - Delete account\n";
 }
 
 void ChatConsole::ShowAdminMenu() const {
@@ -820,7 +901,8 @@ void ChatConsole::ShowAdminMenu() const {
               << "5 - Open general chat\n"
               << "6 - Disconnect user\n"
               << "7 - Ban user\n"
-              << "8 - Unban user\n";
+              << "8 - Unban user\n"
+              << "9 - Delete forever banned users\n";
 }
 
 } // namespace console_chat::client

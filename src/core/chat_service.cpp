@@ -393,23 +393,7 @@ bool ChatService::BanUser(const std::string& login, const BanPeriod period) {
         return false;
     }
 
-    if (bannedForever && !PersistDeletePrivateChatsWithUser(login)) {
-        return false;
-    }
-
     user->SetBan(bannedUntilEpoch, bannedForever);
-
-    if (bannedForever) {
-        for (auto it = m_chats.begin(); it != m_chats.end();) {
-            auto* privateChat = dynamic_cast<PrivateChat*>(it->second.get());
-            if (privateChat && privateChat->HasUser(login)) {
-                it = m_chats.erase(it);
-                continue;
-            }
-            ++it;
-        }
-    }
-
     return true;
 }
 
@@ -430,6 +414,50 @@ bool ChatService::UnbanUser(const std::string& login) {
 bool ChatService::IsUserBanned(const std::string& login) const {
     const User* user = FindUser(login);
     return user && user->IsBannedAt(CurrentEpochSeconds());
+}
+
+bool ChatService::DeleteUserAccount(const std::string& login) {
+    if (login.empty() || login == ADMIN_SYSTEM_LOGIN || !m_users.contains(login)) {
+        return false;
+    }
+
+    if (!PersistDeleteUser(login)) {
+        return false;
+    }
+
+    m_users.erase(login);
+    for (auto it = m_chats.begin(); it != m_chats.end();) {
+        auto* privateChat = dynamic_cast<PrivateChat*>(it->second.get());
+        if (privateChat && privateChat->HasUser(login)) {
+            it = m_chats.erase(it);
+            continue;
+        }
+        ++it;
+    }
+
+    return true;
+}
+
+bool ChatService::DeleteForeverBannedUsers(size_t& deletedCount) {
+    deletedCount = 0;
+
+    std::vector<std::string> loginsToDelete;
+    loginsToDelete.reserve(m_users.size());
+    for (const auto& [login, user] : m_users) {
+        if (user->IsBannedForever()) {
+            loginsToDelete.push_back(login);
+        }
+    }
+
+    std::sort(loginsToDelete.begin(), loginsToDelete.end());
+    for (const auto& login : loginsToDelete) {
+        if (!DeleteUserAccount(login)) {
+            return false;
+        }
+        ++deletedCount;
+    }
+
+    return true;
 }
 
 bool ChatService::CreatePrivateChat(
@@ -684,6 +712,10 @@ bool ChatService::PersistUserBan(
 bool ChatService::PersistDeletePrivateChatsWithUser(const std::string& login) {
     return !m_storageManager ||
         m_storageManager->DeletePrivateChatsWithUser(login);
+}
+
+bool ChatService::PersistDeleteUser(const std::string& login) {
+    return !m_storageManager || m_storageManager->DeleteUser(login);
 }
 
 } // namespace console_chat::core

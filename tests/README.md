@@ -55,6 +55,9 @@ ctest --test-dir build -L e2e --output-on-failure
 | `ChatService.MessageLimit` | Сообщение длиной `256` символов принимается, `257` символов отклоняется. |
 | `ChatService.PrivateChat` | Создание приватного чата и запрет некорректных вариантов. |
 | `ChatService.PrivateAccess` | Только участники приватного чата могут писать и читать его сообщения. |
+| `ChatService.ForeverBanDoesNotDeletePrivateChats` | Вечный бан не удаляет приватные чаты без отдельной админской чистки. |
+| `ChatService.DeleteUserAccountRemovesUserAndPrivateChats` | Удаление аккаунта удаляет пользователя и его приватные чаты. |
+| `ChatService.DeleteForeverBannedUsersRemovesOnlyForeverBannedUsers` | Админская чистка удаляет только пользователей с вечным баном. |
 | `ChatService.PrivateLimit` | Ограничение на `45` приватных чатов для пользователя. |
 | `ChatService.StorageFailureDoesNotChangeMemoryState` | Ошибка точечной записи пользователя, чата или сообщения не изменяет состояние в памяти. |
 | `ChatServiceState.SaveLoad` | Сохранение и загрузка пользователей, чатов и сообщений. |
@@ -113,7 +116,10 @@ ctest --test-dir build -L e2e --output-on-failure
 | --- | --- |
 | `RequestFlow.GeneralChat` | Полный сценарий команд: статус авторизации, регистрация, вход, общий чат, отправка сообщения, выход. |
 | `RequestFlow.PrivateChat` | Сценарий нескольких сессий: пользователи, приватный чат, доступ участников и запрет доступа третьему пользователю. |
+| `RequestFlow.AdminCanReadPrivateChatAndBanUser` | Админ читает приватный чат, банит, разбанивает и отдельно удаляет forever-banned аккаунты. |
+| `RequestFlow.AdminCanCreateOwnPrivateChatAndSendMessage` | Админ создаёт свой приватный чат с пользователем и пишет от имени `ADMIN`. |
 | `RequestFlow.StateReload` | Сохранение состояния через серверные команды и загрузку этого состояния новым `ChatService`. |
+| `RequestFlow.DeleteAccountRequiresConfirmationAndLogsOut` | Удаление аккаунта требует подтверждения login и завершает пользовательскую сессию. |
 | `RequestFlow.BadRequests` | Ответы роутера на пустые, неизвестные и некорректные команды. |
 
 ## E2E-Тесты
@@ -126,4 +132,5 @@ E2E-тесты поднимают тестовый сервер в отдель�
 | --- | --- |
 | `ClientServerE2E.GeneralChat` | Два клиента подключаются по TCP, регистрируются, входят и обмениваются сообщением в `GENERAL`. |
 | `ClientServerE2E.PrivateChat` | Три TCP-клиента проверяют создание приватного чата, доставку сообщения участнику и запрет доступа третьему пользователю. |
+| `ClientServerE2E.DeleteAccount` | TCP-клиент удаляет свой аккаунт только после подтверждения своего login. |
 | `ClientServerE2E.StatePersistsAcrossServerRestart` | Сообщение сохраняется в файлы состояния и доступно после перезапуска тестового сервера. |

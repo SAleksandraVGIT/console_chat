@@ -141,6 +141,27 @@ public:
         return true;
     }
 
+    bool DeleteUser(const std::string& login) override {
+        if (failDeleteUser) {
+            return false;
+        }
+
+        const auto userEnd = std::remove_if(
+            state.Users.begin(),
+            state.Users.end(),
+            [&login](const console_chat::core::UserState& user) {
+                return user.Login == login;
+            });
+
+        if (userEnd == state.Users.end()) {
+            return false;
+        }
+
+        state.Users.erase(userEnd, state.Users.end());
+        DeletePrivateChatsWithUser(login);
+        return true;
+    }
+
     bool Reset() override {
         state = {};
         return true;
@@ -149,6 +170,7 @@ public:
     bool failAddUser = false;
     bool failAddChat = false;
     bool failAddMessage = false;
+    bool failDeleteUser = false;
     console_chat::core::ServiceState state;
 };
 
@@ -318,7 +340,7 @@ TEST(ChatService, BanUserBlocksLogin) {
     EXPECT_TRUE(service.Authenticate("user_1", "secret"));
 }
 
-TEST(ChatService, ForeverBanDeletesPrivateChats) {
+TEST(ChatService, ForeverBanDoesNotDeletePrivateChats) {
     ChatService service;
 
     ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
@@ -327,8 +349,44 @@ TEST(ChatService, ForeverBanDeletesPrivateChats) {
 
     ASSERT_TRUE(service.BanUser("user_1", console_chat::core::BanPeriod::Forever));
 
+    EXPECT_TRUE(Contains(service.GetAllChatNames(), "user_1&2"));
+}
+
+TEST(ChatService, DeleteUserAccountRemovesUserAndPrivateChats) {
+    ChatService service;
+
+    ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
+    ASSERT_TRUE(service.Register("User_2", "user_2", "secret"));
+    ASSERT_TRUE(service.CreatePrivateChat("user_1", "user_2", "user_1&2"));
+
+    EXPECT_FALSE(service.DeleteUserAccount(""));
+    EXPECT_FALSE(service.DeleteUserAccount(console_chat::core::ADMIN_SYSTEM_LOGIN));
+    ASSERT_TRUE(service.DeleteUserAccount("user_1"));
+
+    EXPECT_FALSE(service.Authenticate("user_1", "secret"));
+    EXPECT_EQ(service.GetAllUserLogins(), (std::vector<std::string>{"user_2"}));
     EXPECT_FALSE(Contains(service.GetAllChatNames(), "user_1&2"));
-    EXPECT_TRUE(service.GetMessagesForAdmin("user_1&2").empty());
+}
+
+TEST(ChatService, DeleteForeverBannedUsersRemovesOnlyForeverBannedUsers) {
+    ChatService service;
+
+    ASSERT_TRUE(service.Register("User_1", "user_1", "secret"));
+    ASSERT_TRUE(service.Register("User_2", "user_2", "secret"));
+    ASSERT_TRUE(service.Register("User_3", "user_3", "secret"));
+    ASSERT_TRUE(service.CreatePrivateChat("user_1", "user_2", "user_1&2"));
+    ASSERT_TRUE(service.CreatePrivateChat("user_2", "user_3", "user_2&3"));
+    ASSERT_TRUE(service.BanUser("user_1", console_chat::core::BanPeriod::Forever));
+    ASSERT_TRUE(service.BanUser("user_2", console_chat::core::BanPeriod::OneDay));
+
+    size_t deletedCount = 0;
+    ASSERT_TRUE(service.DeleteForeverBannedUsers(deletedCount));
+
+    EXPECT_EQ(deletedCount, 1u);
+    EXPECT_EQ(service.GetAllUserLogins(), (std::vector<std::string>{"user_2", "user_3"}));
+    EXPECT_FALSE(Contains(service.GetAllChatNames(), "user_1&2"));
+    EXPECT_TRUE(Contains(service.GetAllChatNames(), "user_2&3"));
+    EXPECT_TRUE(service.IsUserBanned("user_2"));
 }
 
 TEST(ChatService, AdminPrivateChat) {

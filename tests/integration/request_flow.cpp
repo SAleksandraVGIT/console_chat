@@ -187,7 +187,25 @@ TEST_F(RequestFlow, AdminCanReadPrivateChatAndBanUser) {
         (std::vector<std::string>{"OK"}));
     EXPECT_EQ(
         HandleRequest({"ADMIN_GET_CHATS"}, *service, adminContext, credentials, &sessions),
+        (std::vector<std::string>{
+            "OK",
+            GENERAL_CHAT_NAME,
+            "GENERAL",
+            "",
+            "",
+            "user_1&2",
+            "PRIVATE",
+            "user_1",
+            "user_2"}));
+    EXPECT_EQ(
+        HandleRequest({"ADMIN_DELETE_FOREVER_BANNED_USERS"}, *service, adminContext, credentials, &sessions),
+        (std::vector<std::string>{"OK", "1"}));
+    EXPECT_EQ(
+        HandleRequest({"ADMIN_GET_CHATS"}, *service, adminContext, credentials, &sessions),
         (std::vector<std::string>{"OK", GENERAL_CHAT_NAME, "GENERAL", "", ""}));
+    EXPECT_EQ(
+        HandleRequest({"ADMIN_DELETE_FOREVER_BANNED_USERS"}, *service, adminContext, credentials, &sessions),
+        (std::vector<std::string>{"OK", "0"}));
 }
 
 TEST_F(RequestFlow, AdminCanCreateOwnPrivateChatAndSendMessage) {
@@ -250,6 +268,41 @@ TEST_F(RequestFlow, StateReload) {
     EXPECT_EQ(
         HandleRequest({"GET_MESSAGES", GENERAL_CHAT_NAME}, loaded, loadedSession),
         (std::vector<std::string>{"OK", "User_1", "Saved message"}));
+}
+
+TEST_F(RequestFlow, DeleteAccountRequiresConfirmationAndLogsOut) {
+    std::string session;
+    ASSERT_EQ(Request({"REGISTER", "User_1", "user_1", "secret"}, session), (std::vector<std::string>{"OK"}));
+    ASSERT_EQ(Request({"REGISTER", "User_2", "user_2", "secret"}, session), (std::vector<std::string>{"OK"}));
+
+    EXPECT_EQ(
+        Request({"DELETE_ACCOUNT", "user_1"}, session),
+        (std::vector<std::string>{"ERR", "access denied"}));
+
+    ASSERT_EQ(Request({"LOGIN", "user_1", "secret"}, session), (std::vector<std::string>{"OK"}));
+    ASSERT_EQ(Request({"CREATE_PRIVATE", "user_2", "user_1&2"}, session), (std::vector<std::string>{"OK"}));
+
+    EXPECT_EQ(
+        Request({"DELETE_ACCOUNT", "wrong_login"}, session),
+        (std::vector<std::string>{"ERR", "confirmation mismatch"}));
+    EXPECT_EQ(Request({"IS_AUTH"}, session), (std::vector<std::string>{"OK", "1"}));
+
+    EXPECT_EQ(Request({"DELETE_ACCOUNT", "user_1"}, session), (std::vector<std::string>{"OK"}));
+    EXPECT_EQ(Request({"IS_AUTH"}, session), (std::vector<std::string>{"OK", "0"}));
+    EXPECT_EQ(Request({"LOGIN", "user_1", "secret"}, session), (std::vector<std::string>{"ERR", "auth failed"}));
+    EXPECT_EQ(
+        Request({"GET_ALL_USERS"}, session),
+        (std::vector<std::string>{"OK", "user_2"}));
+
+    RequestContext adminContext;
+    FakeSessionController sessions;
+    const AdminCredentials credentials{"admin", "secret", true};
+    ASSERT_EQ(
+        HandleRequest({"ADMIN_LOGIN", "admin", "secret"}, *service, adminContext, credentials, &sessions),
+        (std::vector<std::string>{"OK"}));
+    EXPECT_EQ(
+        HandleRequest({"ADMIN_GET_CHATS"}, *service, adminContext, credentials, &sessions),
+        (std::vector<std::string>{"OK", GENERAL_CHAT_NAME, "GENERAL", "", ""}));
 }
 
 TEST_F(RequestFlow, BadRequests) {

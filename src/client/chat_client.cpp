@@ -103,6 +103,11 @@ void ChatClient::Logout() {
     Request({"LOGOUT"});
 }
 
+bool ChatClient::DeleteAccount(const std::string& confirmationLogin) {
+    const auto resp = Request({"DELETE_ACCOUNT", confirmationLogin});
+    return !resp.empty() && resp[0] == "OK";
+}
+
 bool ChatClient::IsAuthenticated() const {
     const auto resp = Request({"IS_AUTH"});
     return resp.size() >= 2 && resp[0] == "OK" && resp[1] == "1";
@@ -273,6 +278,19 @@ bool ChatClient::AdminBanUser(const std::string& login, const std::string& perio
 bool ChatClient::AdminUnbanUser(const std::string& login) {
     const auto resp = Request({"ADMIN_UNBAN_USER", login});
     return !resp.empty() && resp[0] == "OK";
+}
+
+int ChatClient::AdminDeleteForeverBannedUsers() {
+    const auto resp = Request({"ADMIN_DELETE_FOREVER_BANNED_USERS"});
+    if (resp.size() < 2 || resp[0] != "OK") {
+        return -1;
+    }
+
+    try {
+        return std::stoi(resp[1]);
+    } catch (const std::exception&) {
+        return -1;
+    }
 }
 
 } // namespace console_chat::client

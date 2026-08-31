@@ -228,6 +228,27 @@ TEST_F(ClientServerE2E, PrivateChat) {
     }
 }
 
+TEST_F(ClientServerE2E, DeleteAccount) {
+    const auto port = FindFreePort();
+    ASSERT_NE(port, 0);
+
+    TestServer server(port, 1, usersFile, chatsFile);
+
+    {
+        ChatClient user1("127.0.0.1", port);
+
+        ASSERT_TRUE(user1.Register("User_1", "user_1", "secret"));
+        ASSERT_TRUE(user1.Authenticate("user_1", "secret"));
+
+        EXPECT_FALSE(user1.DeleteAccount("wrong_login"));
+        EXPECT_TRUE(user1.IsAuthenticated());
+
+        EXPECT_TRUE(user1.DeleteAccount("user_1"));
+        EXPECT_FALSE(user1.IsAuthenticated());
+        EXPECT_FALSE(user1.Authenticate("user_1", "secret"));
+    }
+}
+
 TEST_F(ClientServerE2E, StatePersistsAcrossServerRestart) {
     const auto firstPort = FindFreePort();
     ASSERT_NE(firstPort, 0);

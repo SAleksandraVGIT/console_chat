@@ -86,6 +86,19 @@ inline constexpr std::string_view DELETE_PRIVATE_CHATS_WITH_USER =
     "JOIN users AS u ON u.login = ? "
     "WHERE c.first_user_id = u.id OR c.second_user_id = u.id";
 
+inline constexpr std::string_view DELETE_MESSAGES_BY_USER =
+    "DELETE m FROM messages AS m "
+    "JOIN users AS u ON u.id = m.sender_id "
+    "WHERE u.login = ?";
+
+inline constexpr std::string_view DELETE_PASSWORD_BY_USER =
+    "DELETE p FROM users_passwords AS p "
+    "JOIN users AS u ON u.id = p.user_id "
+    "WHERE u.login = ?";
+
+inline constexpr std::string_view DELETE_USER_BY_LOGIN =
+    "DELETE FROM users WHERE login = ? AND login <> '__admin__'";
+
 inline constexpr std::string_view DELETE_MESSAGES = "DELETE FROM messages";
 inline constexpr std::string_view DELETE_CHATS = "DELETE FROM chats";
 inline constexpr std::string_view DELETE_PASSWORDS = "DELETE FROM users_passwords";
