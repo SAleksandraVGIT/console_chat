@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cctype>
 #include <cstdint>
+#include <string_view>
 #include <utility>
 
 namespace console_chat::core {
@@ -40,6 +42,23 @@ bool IsPrivateChatBetween(
     const auto& users = chat.GetUsers();
     return (users[0] == firstLogin && users[1] == secondLogin) ||
         (users[0] == secondLogin && users[1] == firstLogin);
+}
+
+bool IsAdminDisplayLogin(const std::string& login) {
+    const std::string_view adminLogin = ADMIN_MESSAGE_NAME;
+    return login.size() == adminLogin.size() &&
+        std::equal(
+            login.begin(),
+            login.end(),
+            adminLogin.begin(),
+            [](const char left, const char right) {
+                return std::tolower(static_cast<unsigned char>(left)) ==
+                    std::tolower(static_cast<unsigned char>(right));
+            });
+}
+
+bool IsReservedLogin(const std::string& login) {
+    return login == ADMIN_SYSTEM_LOGIN || IsAdminDisplayLogin(login);
 }
 
 ChatService::ChatService()
@@ -101,7 +120,8 @@ bool ChatService::Register(
     std::string&& login,
     std::string&& password)
 {
-    if (login == ADMIN_SYSTEM_LOGIN || m_users.contains(login)) {
+    if (IsReservedLogin(login) || m_users.contains(login))
+    {
         return false;
     }
 

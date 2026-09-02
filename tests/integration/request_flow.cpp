@@ -87,6 +87,15 @@ TEST_F(RequestFlow, GeneralChat) {
     std::string session;
 
     EXPECT_EQ(Request({"IS_AUTH"}, session), (std::vector<std::string>{"OK", "0"}));
+    EXPECT_EQ(
+        Request({"REGISTER", "Fake Admin", console_chat::core::ADMIN_MESSAGE_NAME, "secret"}, session),
+        (std::vector<std::string>{"ERR", "register failed"}));
+    EXPECT_EQ(
+        Request({"REGISTER", "Fake Admin Lower", "admin", "secret"}, session),
+        (std::vector<std::string>{"ERR", "register failed"}));
+    EXPECT_EQ(
+        Request({"REGISTER", "System Admin", console_chat::core::ADMIN_SYSTEM_LOGIN, "secret"}, session),
+        (std::vector<std::string>{"ERR", "register failed"}));
     EXPECT_EQ(Request({"REGISTER", "User_1", "user_1", "secret"}, session), (std::vector<std::string>{"OK"}));
     EXPECT_EQ(Request({"LOGIN", "user_1", "secret"}, session), (std::vector<std::string>{"OK"}));
     EXPECT_EQ(Request({"IS_AUTH"}, session), (std::vector<std::string>{"OK", "1"}));

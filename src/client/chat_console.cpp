@@ -359,7 +359,7 @@ void ChatConsole::RegistrationFlow() {
 
     std::cout << (success
                     ? "Registration successful.\n"
-                    : "Registration failed. Login is already exist.\n");
+                    : "Registration failed. Login is unavailable.\n");
 }
 
 void ChatConsole::LoginFlow() {

@@ -206,6 +206,10 @@ TEST(ChatService, RegisterLogin) {
 
     EXPECT_TRUE(service.Register("User_1", "user_1", "secret"));
     EXPECT_FALSE(service.Register("User_1 Duplicate", "user_1", "another"));
+    EXPECT_FALSE(service.Register("Fake Admin", console_chat::core::ADMIN_MESSAGE_NAME, "secret"));
+    EXPECT_FALSE(service.Register("Fake Admin Lower", "admin", "secret"));
+    EXPECT_FALSE(service.Register("Fake Admin Mixed", "Admin", "secret"));
+    EXPECT_FALSE(service.Register("System Admin", console_chat::core::ADMIN_SYSTEM_LOGIN, "secret"));
 
     EXPECT_TRUE(service.Authenticate("user_1", "secret"));
     EXPECT_FALSE(service.Authenticate("user_1", "wrong"));
