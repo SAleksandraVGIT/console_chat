@@ -78,3 +78,4 @@ data/
 !/config/mysql.conf.example
 !/config/admin.conf.example
 !/config/server.conf.example
+!/config/client.conf.example

@@ -52,25 +52,26 @@ public:
     std::string GetCurrentUserLogin() const;
     std::string GetCurrentUserName() const;
 
-    std::vector<std::string> GetMyChats() const;
+    std::vector<std::string> GetMyChats(bool background = false) const;
     bool CreatePrivateChat(std::string&& recipientLogin, std::string&& chatName);
     CreatePrivateChatResult CreatePrivateChatDetailed(
         std::string&& recipientLogin,
         std::string&& chatName);
 
-    std::vector<core::Message> GetMessages(const std::string& chatName) const;
+    std::vector<core::Message> GetMessages(const std::string& chatName, bool background = false) const;
     bool SendMessage(const std::string& chatName, std::string&& text);
 
-    std::vector<std::string> GetAllUserLogins() const;
+    std::vector<std::string> GetAllUserLogins(bool background = false) const;
+    void NotifyActivity() const;
 
     bool AdminLogin(const std::string& login, const std::string& password);
-    std::vector<AdminUserInfo> AdminGetUsers() const;
-    std::vector<AdminChatInfo> AdminGetChats() const;
+    std::vector<AdminUserInfo> AdminGetUsers(bool background = false) const;
+    std::vector<AdminChatInfo> AdminGetChats(bool background = false) const;
     bool AdminCreatePrivateChat(std::string&& recipientLogin, std::string&& chatName);
     CreatePrivateChatResult AdminCreatePrivateChatDetailed(
         std::string&& recipientLogin,
         std::string&& chatName);
-    std::vector<core::Message> AdminGetMessages(const std::string& chatName) const;
+    std::vector<core::Message> AdminGetMessages(const std::string& chatName, bool background = false) const;
     bool AdminSendMessageToChat(const std::string& chatName, std::string&& text);
     bool AdminSendGeneral(std::string&& text);
     bool AdminKickUser(const std::string& login);
@@ -79,7 +80,7 @@ public:
     int AdminDeleteForeverBannedUsers();
 
 private:
-    std::vector<std::string> Request(const std::vector<std::string>& parts) const;
+    std::vector<std::string> Request(const std::vector<std::string>& parts, bool background = false) const;
     static std::vector<std::string> Split(const std::string& line, const char delim);
 
 private:

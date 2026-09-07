@@ -55,6 +55,30 @@ std::vector<std::string> HandleRequest(
 
     const std::string& cmd = req[0];
 
+    if (cmd == "POLL") {
+        if (context.currentLogin.empty() && !context.isAdmin) {
+            return {"ERR", "access denied"};
+        }
+        if (req.size() < 2) {
+            return {"ERR", "invalid poll request"};
+        }
+        const auto& query = req[1];
+        const bool list = query == "GET_MY_CHATS" || query == "GET_ALL_USERS" ||
+            query == "ADMIN_GET_USERS" || query == "ADMIN_GET_CHATS";
+        const bool messages = query == "GET_MESSAGES" || query == "ADMIN_GET_MESSAGES";
+        if ((list && req.size() == 2) || (messages && req.size() == 3)) {
+            return HandleRequest(std::vector<std::string>(req.begin() + 1, req.end()),
+                service, context, adminCredentials, sessionController);
+        }
+        return {"ERR", "invalid poll request"};
+    }
+
+    if (cmd == "ACTIVITY" && req.size() == 1) {
+        return (context.currentLogin.empty() && !context.isAdmin)
+            ? std::vector<std::string>{"ERR", "access denied"}
+            : std::vector<std::string>{"OK"};
+    }
+
     if (cmd == "ADMIN_LOGIN" && req.size() == 3) {
         if (!adminCredentials.Enabled ||
             req[1] != adminCredentials.Login ||

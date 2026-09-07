@@ -1,6 +1,8 @@
 #include "console_chat/client/chat_console.h"
 #include "console_chat/client/chat_client.h"
+#include "console_chat/client/client_config.h"
 
+#include <clocale>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -19,6 +21,7 @@ int main(int argc, char* argv[]) {
         std::string host = DEFAULT_HOST;
         int port = DEFAULT_PORT;
         bool adminMode = false;
+        std::string configPath = "config/client.conf";
 
         for (int i = 1; i < argc; ++i) {
             const std::string arg = argv[i];
@@ -34,8 +37,13 @@ int main(int argc, char* argv[]) {
                 adminMode = true;
                 continue;
             }
+            if (arg == "--client-config" && i + 1 < argc) {
+                configPath = argv[++i];
+                continue;
+            }
             if (arg == "--help") {
-                std::cout << "Usage: console_chat [--host <ip>] [--port <number>] [--admin]\n";
+                std::cout << "Usage: console_chat [--host <ip>] [--port <number>] [--admin] "
+                             "[--client-config <path>]\n";
                 return 0;
             }
 
@@ -46,8 +54,17 @@ int main(int argc, char* argv[]) {
             throw std::runtime_error("Port must be in range 1024..49151.");
         }
 
+        std::setlocale(LC_CTYPE, "");
+        console_chat::client::ClientConfig config;
+        std::string error;
+        if (!console_chat::client::LoadClientConfig(configPath, config, error)) {
+            throw std::runtime_error(error);
+        }
+        if (!error.empty()) {
+            std::cerr << error << ". Using default refresh interval (3000 ms).\n";
+        }
         console_chat::client::ChatClient client(host, port);
-        console_chat::client::ChatConsole console(client);
+        console_chat::client::ChatConsole console(client, config);
         return adminMode ? console.RunAdmin() : console.Run();
     } catch (const std::exception& ex) {
         std::cerr << "Fatal error: " << ex.what() << std::endl;

@@ -24,6 +24,8 @@ add_executable(console_chat_unit_tests
   ${CMAKE_SOURCE_DIR}/src/server/server_config.cpp
   unit/base_chat.cpp
   unit/chat_service.cpp
+  unit/client_config.cpp
+  unit/live_view.cpp
   unit/mysql_manager.cpp
   unit/password_protector.cpp
   unit/private_chat.cpp

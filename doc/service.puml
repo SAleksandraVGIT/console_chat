@@ -256,8 +256,11 @@ note right of RequestRouter
 end note
 
 note right of Session
-  Each client connection has a configured
-  receive timeout. ADMIN_KICK_USER sends
+  steady_clock tracks the idle deadline.
+  POLL reads never reset it; ACTIVITY and
+  ordinary requests update user activity.
+  Receive timeout uses the remaining time.
+  ADMIN_KICK_USER sends
   "disconnected by ADMIN" before closing
   active user sockets.
 end note

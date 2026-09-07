@@ -15,7 +15,7 @@ package "Client application (console_chat)" {
   }
 
   class ChatConsole {
-    +ChatConsole(service)
+    +ChatConsole(service, config)
     +Run() : int
     +RunAdmin() : int
     -UserMenu()
@@ -28,6 +28,8 @@ package "Client application (console_chat)" {
     -OpenChatFlow()
     -OpenGeneralChatFlow()
     -ChatSession(chatName)
+    -LiveChatSession(chatName, admin, canSend)
+    -ShowLiveList(snapshot)
     -ShowMyChatsFlow()
     -ShowAllUsersFlow()
     -AdminShowUsersFlow()
@@ -45,6 +47,17 @@ package "Client application (console_chat)" {
     -ShowAdminMainMenu()
     -ShowAdminMenu()
     -m_service : ChatClient&
+    -m_config : ClientConfig
+  }
+
+  class ClientConfig {
+    +RefreshInterval : milliseconds = 3000
+  }
+
+  class LiveView {
+    +LiveView(interval, followTail)
+    +IsInteractive() : bool
+    +ReadLine(snapshot, activity, hint) : string
   }
 
   class ChatClient {
@@ -55,28 +68,29 @@ package "Client application (console_chat)" {
     +AuthenticateDetailed(login, password) : AuthResult
     +Logout()
     +DeleteAccount(confirmationLogin) : bool
+    +NotifyActivity()
     +IsAuthenticated() : bool
     +GetCurrentUserLogin() : string
     +GetCurrentUserName() : string
-    +GetMyChats() : vector<string>
+    +GetMyChats(background = false) : vector<string>
     +CreatePrivateChat(recipientLogin, chatName) : bool
     +CreatePrivateChatDetailed(recipientLogin, chatName) : CreatePrivateChatResult
-    +GetMessages(chatName) : vector<Message>
+    +GetMessages(chatName, background = false) : vector<Message>
     +SendMessage(chatName, text) : bool
-    +GetAllUserLogins() : vector<string>
+    +GetAllUserLogins(background = false) : vector<string>
     +AdminLogin(login, password) : bool
-    +AdminGetUsers() : vector<AdminUserInfo>
-    +AdminGetChats() : vector<AdminChatInfo>
+    +AdminGetUsers(background = false) : vector<AdminUserInfo>
+    +AdminGetChats(background = false) : vector<AdminChatInfo>
     +AdminCreatePrivateChat(recipientLogin, chatName) : bool
     +AdminCreatePrivateChatDetailed(recipientLogin, chatName) : CreatePrivateChatResult
-    +AdminGetMessages(chatName) : vector<Message>
+    +AdminGetMessages(chatName, background = false) : vector<Message>
     +AdminSendMessageToChat(chatName, text) : bool
     +AdminSendGeneral(text) : bool
     +AdminKickUser(login) : bool
     +AdminBanUser(login, period) : bool
     +AdminUnbanUser(login) : bool
     +AdminDeleteForeverBannedUsers() : int
-    -Request(parts) : vector<string>
+    -Request(parts, background = false) : vector<string>
     -{static} Split(line, delim) : vector<string>
     -m_socket : TcpSocket
   }
@@ -174,6 +188,9 @@ User --> ChatConsole : menu and chat input
 ClientMain ..> ChatClient : creates with host and port
 ClientMain ..> ChatConsole : creates and runs
 ChatConsole o-- ChatClient : uses
+ChatConsole ..> LiveView : open lists and messages
+ChatConsole *-- ClientConfig
+ClientMain ..> ClientConfig : LoadClientConfig
 ChatConsole ..> ActionMainMenu
 ChatConsole ..> ActionUserMenu
 ChatConsole ..> ActionAdminMainMenu
@@ -200,6 +217,17 @@ note right of ChatClient
   Forced disconnect:
   ERR<TAB>disconnected by ADMIN
   ERR<TAB>disconnected by inactivity timeout
+
+  Background read:
+  POLL<TAB>READ_COMMAND<TAB>ARGS...
+  User input: ACTIVITY
+end note
+
+note bottom of LiveView
+  One input / refresh loop, no network worker.
+  steady_clock interval from client.conf.
+  Redraw preserves draft and cursor.
+  Terminal mode restored on exit or error.
 end note
 
 note bottom of TcpSocket

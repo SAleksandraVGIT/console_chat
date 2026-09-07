@@ -187,7 +187,13 @@ bool TcpSocket::SendLine(const std::string& line) const {
 
     size_t sent = 0;
     while (sent < data.size()) {
-        const auto n = send(ToNative(m_fd), data.data() + sent, static_cast<int>(data.size() - sent), 0);
+        // A peer may disconnect between ticks. Report the error instead of raising SIGPIPE.
+#ifdef MSG_NOSIGNAL
+        constexpr int flags = MSG_NOSIGNAL;
+#else
+        constexpr int flags = 0;
+#endif
+        const auto n = send(ToNative(m_fd), data.data() + sent, static_cast<int>(data.size() - sent), flags);
         if (n <= 0) {
             return false;
         }

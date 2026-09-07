@@ -49,6 +49,8 @@ set(CHAT_CORE_SOURCES
   src/storage/mysql_queries.h
   src/storage/mysql_manager.cpp
   src/client/chat_console.cpp
+  src/client/client_config.cpp
+  src/client/live_view.cpp
   src/network/tcp_socket.cpp
   src/client/chat_client.cpp
 )

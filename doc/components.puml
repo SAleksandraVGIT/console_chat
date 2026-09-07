@@ -14,6 +14,9 @@ node "Client process: console_chat" as ClientNode {
   [Admin menu\n(--admin)] as AdminConsole
   [ChatClient] as Client
   [Client TcpSocket] as ClientSocket
+  [LiveView] as LiveView
+  [ClientConfig] as ClientConfig
+  file "client.conf" as ClientFile
 }
 
 cloud "TCP/IP\nline protocol on port 7777" as Network
@@ -46,6 +49,10 @@ package "Domain objects" as Domain {
 User --> Console : commands and messages
 Admin --> AdminConsole : admin commands
 Console --> Client : client API calls
+Console --> LiveView : input and refresh loop
+AdminConsole --> LiveView : live lists and messages
+ClientConfig --> ClientFile : load refresh interval
+ClientConfig --> LiveView : interval (default 3000 ms)
 AdminConsole --> Client : admin API calls
 Client --> ClientSocket : request / response lines
 ClientSocket --> Network
@@ -79,8 +86,10 @@ note right of Session
   A shared mutex protects ChatService.
   SessionRegistry can close active
   user sockets for kick and ban.
-  Client sessions use the configured
-  receive timeout.
+  steady_clock tracks user activity.
+  POLL does not extend the idle deadline.
+  ACTIVITY and ordinary requests extend it.
+  Receive timeout follows the deadline.
 end note
 
 note right of Storage

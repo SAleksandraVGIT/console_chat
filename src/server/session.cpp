@@ -71,13 +71,33 @@ void HandleClientSession(
     SessionRegistry* sessionRegistry,
     const std::chrono::seconds clientIdleTimeout)
 {
-    client.SetReceiveTimeout(clientIdleTimeout);
-
     RequestContext context;
     std::string line;
+    auto lastActivity = std::chrono::steady_clock::now();
 
-    while (client.RecvLine(line)) {
+    while (true) {
+        const auto remaining = clientIdleTimeout - (std::chrono::steady_clock::now() - lastActivity);
+        if (remaining <= decltype(remaining)::zero()) {
+            client.SendLine(IDLE_TIMEOUT_RESPONSE);
+            break;
+        }
+        // Recompute the deadline after each poll; background traffic is not user activity.
+        client.SetReceiveTimeout(std::chrono::ceil<std::chrono::seconds>(remaining));
+        if (!client.RecvLine(line)) {
+            if (client.WasLastReceiveTimedOut()) {
+                client.SendLine(IDLE_TIMEOUT_RESPONSE);
+            }
+            break;
+        }
+        const auto now = std::chrono::steady_clock::now();
+        if (now - lastActivity >= clientIdleTimeout) {
+            client.SendLine(IDLE_TIMEOUT_RESPONSE);
+            break;
+        }
         const auto req = Split(line, '\t');
+        if (!req.empty() && req[0] != "POLL") {
+            lastActivity = now;
+        }
         std::vector<std::string> resp;
         const std::string previousLogin = context.currentLogin;
 
@@ -94,10 +114,6 @@ void HandleClientSession(
         if (!client.SendLine(Join(resp, '\t'))) {
             break;
         }
-    }
-
-    if (client.WasLastReceiveTimedOut()) {
-        client.SendLine(IDLE_TIMEOUT_RESPONSE);
     }
 
     if (sessionRegistry) {

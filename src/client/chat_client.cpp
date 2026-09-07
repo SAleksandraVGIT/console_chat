@@ -47,8 +47,8 @@ std::vector<std::string> ChatClient::Split(const std::string& line, const char d
     return parts;
 }
 
-std::vector<std::string> ChatClient::Request(const std::vector<std::string>& parts) const {
-    const std::string payload = Join(parts, '\t');
+std::vector<std::string> ChatClient::Request(const std::vector<std::string>& parts, const bool background) const {
+    const std::string payload = (background ? "POLL\t" : "") + Join(parts, '\t');
     if (!m_socket.SendLine(payload)) {
         throw std::runtime_error("Failed to send request.");
     }
@@ -69,7 +69,18 @@ std::vector<std::string> ChatClient::Request(const std::vector<std::string>& par
         }
     }
 
+    if (background && (response.empty() || response[0] != "OK")) {
+        throw std::runtime_error("Auto-refresh failed: " +
+            (response.size() > 1 ? response[1] : "invalid response"));
+    }
     return response;
+}
+
+void ChatClient::NotifyActivity() const {
+    const auto response = Request({"ACTIVITY"});
+    if (response.empty() || response[0] != "OK") {
+        throw std::runtime_error("Failed to report user activity.");
+    }
 }
 
 bool ChatClient::Register(std::string&& name, std::string&& login, std::string&& password) {
@@ -123,8 +134,8 @@ std::string ChatClient::GetCurrentUserName() const {
     return (resp.size() >= 2 && resp[0] == "OK") ? resp[1] : std::string{};
 }
 
-std::vector<std::string> ChatClient::GetMyChats() const {
-    const auto resp = Request({"GET_MY_CHATS"});
+std::vector<std::string> ChatClient::GetMyChats(const bool background) const {
+    const auto resp = Request({"GET_MY_CHATS"}, background);
     if (resp.empty() || resp[0] != "OK") {
         return {};
     }
@@ -156,8 +167,8 @@ CreatePrivateChatResult ChatClient::CreatePrivateChatDetailed(
     return {};
 }
 
-std::vector<core::Message> ChatClient::GetMessages(const std::string& chatName) const {
-    const auto resp = Request({"GET_MESSAGES", chatName});
+std::vector<core::Message> ChatClient::GetMessages(const std::string& chatName, const bool background) const {
+    const auto resp = Request({"GET_MESSAGES", chatName}, background);
     std::vector<core::Message> result;
     if (resp.empty() || resp[0] != "OK") {
         return result;
@@ -175,8 +186,8 @@ bool ChatClient::SendMessage(const std::string& chatName, std::string&& text) {
     return !resp.empty() && resp[0] == "OK";
 }
 
-std::vector<std::string> ChatClient::GetAllUserLogins() const {
-    const auto resp = Request({"GET_ALL_USERS"});
+std::vector<std::string> ChatClient::GetAllUserLogins(const bool background) const {
+    const auto resp = Request({"GET_ALL_USERS"}, background);
     if (resp.empty() || resp[0] != "OK") {
         return {};
     }
@@ -188,8 +199,8 @@ bool ChatClient::AdminLogin(const std::string& login, const std::string& passwor
     return !resp.empty() && resp[0] == "OK";
 }
 
-std::vector<AdminUserInfo> ChatClient::AdminGetUsers() const {
-    const auto resp = Request({"ADMIN_GET_USERS"});
+std::vector<AdminUserInfo> ChatClient::AdminGetUsers(const bool background) const {
+    const auto resp = Request({"ADMIN_GET_USERS"}, background);
     std::vector<AdminUserInfo> result;
     if (resp.empty() || resp[0] != "OK") {
         return result;
@@ -202,8 +213,8 @@ std::vector<AdminUserInfo> ChatClient::AdminGetUsers() const {
     return result;
 }
 
-std::vector<AdminChatInfo> ChatClient::AdminGetChats() const {
-    const auto resp = Request({"ADMIN_GET_CHATS"});
+std::vector<AdminChatInfo> ChatClient::AdminGetChats(const bool background) const {
+    const auto resp = Request({"ADMIN_GET_CHATS"}, background);
     if (resp.empty() || resp[0] != "OK") {
         return {};
     }
@@ -241,8 +252,8 @@ CreatePrivateChatResult ChatClient::AdminCreatePrivateChatDetailed(
     return {};
 }
 
-std::vector<core::Message> ChatClient::AdminGetMessages(const std::string& chatName) const {
-    const auto resp = Request({"ADMIN_GET_MESSAGES", chatName});
+std::vector<core::Message> ChatClient::AdminGetMessages(const std::string& chatName, const bool background) const {
+    const auto resp = Request({"ADMIN_GET_MESSAGES", chatName}, background);
     std::vector<core::Message> result;
     if (resp.empty() || resp[0] != "OK") {
         return result;

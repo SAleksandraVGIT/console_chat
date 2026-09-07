@@ -1,0 +1,2 @@
+# Refresh interval for open user lists, chat lists and messages (100..60000 ms).
+refresh_interval_ms=3000

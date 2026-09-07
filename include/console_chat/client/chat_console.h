@@ -1,7 +1,9 @@
 #pragma once
 
 #include "chat_client.h"
+#include "client_config.h"
 
+#include <functional>
 #include <string>
 
 
@@ -9,8 +11,8 @@ namespace console_chat::client {
 
 class ChatConsole {
 public:
-    explicit ChatConsole(ChatClient& service)
-        : m_service(service) {}
+    explicit ChatConsole(ChatClient& service, const ClientConfig& config = {})
+        : m_service(service), m_config(config) {}
 
     int Run();
     int RunAdmin();
@@ -29,6 +31,8 @@ private:
     void OpenChatFlow();
     void OpenGeneralChatFlow();
     void ChatSession(const std::string& chatName);
+    void LiveChatSession(const std::string& chatName, bool admin, bool canSend);
+    void ShowLiveList(const std::function<std::string(bool)>& snapshot) const;
 
     void ShowMyChatsFlow() const;
     void ShowAllUsersFlow() const;
@@ -86,6 +90,7 @@ private:
 
 private:
     ChatClient& m_service;
+    ClientConfig m_config;
 };
 
 } // namespace console_chat::client

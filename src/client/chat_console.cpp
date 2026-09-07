@@ -1,4 +1,5 @@
 #include "console_chat/client/chat_console.h"
+#include "console_chat/client/live_view.h"
 
 #include "console_chat/core/chat_service.h"
 
@@ -11,6 +12,7 @@
 #include <iterator>
 #include <limits>
 #include <stdexcept>
+#include <sstream>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -38,7 +40,8 @@ bool IsConnectionClosedError(const std::exception& error) {
     return message == "Disconnected by ADMIN." ||
         message == "Disconnected due to inactivity timeout." ||
         message == "Failed to send request." ||
-        message == "Failed to receive response.";
+        message == "Failed to receive response." ||
+        message == "Input closed.";
 }
 
 bool ParseInt(const std::string& line, int& value) {
@@ -63,14 +66,16 @@ bool AdminUserExists(const std::vector<AdminUserInfo>& users, const std::string&
 
 std::string ReadLine() {
     std::string input;
-    std::getline(std::cin >> std::ws, input);
+    if (!std::getline(std::cin, input)) {
+        throw std::runtime_error("Input closed.");
+    }
     return input;
 }
 
 int ReadInt() {
     std::string line;
     if (!std::getline(std::cin, line)) {
-        return INVALID_MENU_CHOICE;
+        throw std::runtime_error("Input closed.");
     }
 
     int value = 0;
@@ -132,7 +137,8 @@ bool IsAdminPrivateChat(const AdminChatInfo& chat) {
 void PrintLastMessages(
     const std::vector<core::Message>& messages,
     const std::string& currentUserName,
-    const size_t lastCount = LAST_MESSAGE_COUNT)
+    const size_t lastCount = LAST_MESSAGE_COUNT,
+    std::ostream& output = std::cout)
 {
     const auto startIt =
         messages.size() > lastCount
@@ -142,9 +148,9 @@ void PrintLastMessages(
     std::for_each(startIt, messages.end(),
         [&](const core::Message& msg) {
             if (!currentUserName.empty() && msg.Name == currentUserName) {
-                std::cout << "\tYou: " << msg.Text << "\n";
+                output << "\tYou: " << msg.Text << "\n";
             } else {
-                std::cout << "[" << msg.Name << "] " << msg.Text << "\n";
+                output << "[" << msg.Name << "] " << msg.Text << "\n";
             }
         });
 }
@@ -483,32 +489,7 @@ bool ChatConsole::DeleteAccountFlow() {
 
 void ChatConsole::ChatSession(const std::string& chatName)
 {
-    std::cout << "\n==== CHAT: " << chatName << " ====\n";
-    PrintLastMessages(m_service.GetMessages(chatName), m_service.GetCurrentUserName());
-
-    std::cout << "Enter message (\"/0\" to exit, \"/all\" to print full chat):\n";
-
-    while (true) {
-        std::string text = ReadLine();
-
-        if (text == "/0") {
-            break;
-        }
-
-        if (text == "/all") {
-            std::cout << "\n==== FULL CHAT ====\n";
-            const auto allMessages = m_service.GetMessages(chatName);
-            PrintLastMessages(allMessages, m_service.GetCurrentUserName(), allMessages.size());
-            continue;
-        }
-
-        if (!m_service.SendMessage(chatName, std::move(text))) {
-            std::cout << "Failed to send message.\n";
-            break;
-        }
-
-        PrintLastMessages(m_service.GetMessages(chatName), m_service.GetCurrentUserName());
-    }
+    LiveChatSession(chatName, false, true);
 }
 
 void ChatConsole::OpenChatFlow()
@@ -544,80 +525,80 @@ void ChatConsole::OpenGeneralChatFlow() {
 }
 
 void ChatConsole::ShowMyChatsFlow() const {
-    const auto chats = m_service.GetMyChats();
-
-    if (chats.empty()) {
-        std::cout << "You have no chats.\n";
-        return;
-    }
-
-    std::cout << "\n==== MY CHATS ====\n";
-
-    for (const auto& name : chats) {
-        std::cout << "- " << name << "\n";
-    }
+    ShowLiveList([this](const bool background) {
+        const auto chats = m_service.GetMyChats(background);
+        std::ostringstream output;
+        output << "==== MY CHATS ====\n";
+        if (chats.empty()) output << "You have no chats.\n";
+        for (const auto& name : chats) output << "- " << name << "\n";
+        return output.str();
+    });
 }
 
 void ChatConsole::ShowAllUsersFlow() const {
-    const auto userLogins = m_service.GetAllUserLogins();
     const auto currentLogin = m_service.GetCurrentUserLogin();
-
-    if (userLogins.empty()) {
-        std::cout << "Users not found.\n";
-        return;
-    }
-
-    std::cout << "\n==== ALL USER LOGINS ====\n";
-
-    for (const auto& userLogin : userLogins) {
-        std::cout << "- " << userLogin;
-        if (!currentLogin.empty() && userLogin == currentLogin) {
-            std::cout << " (You)";
+    ShowLiveList([this, &currentLogin](const bool background) {
+        const auto users = m_service.GetAllUserLogins(background);
+        std::ostringstream output;
+        output << "==== ALL USER LOGINS ====\n";
+        if (users.empty()) output << "Users not found.\n";
+        for (const auto& login : users) {
+            output << "- " << login;
+            if (!currentLogin.empty() && login == currentLogin) output << " (You)";
+            output << "\n";
         }
-        std::cout << "\n";
-    }
+        return output.str();
+    });
 }
 
 void ChatConsole::AdminShowUsersFlow() const {
-    const auto users = m_service.AdminGetUsers();
-
-    if (users.empty()) {
-        std::cout << "Users not found.\n";
-        return;
-    }
-
-    std::cout << "\n==== USERS ====\n";
-    for (const auto& user : users) {
-        std::cout << "- " << user.Login << " (" << user.Name << ")";
-        if (user.BanStatus == "FOREVER") {
-            std::cout << " [banned forever]";
-        } else if (user.BanStatus == "TEMP") {
-            std::cout << " [banned, time left: "
-                      << FormatBanRemaining(user.BannedUntilEpoch, user.ServerNowEpoch)
-                      << "]";
+    ShowLiveList([this](const bool background) {
+        const auto users = m_service.AdminGetUsers(background);
+        std::ostringstream output;
+        output << "==== USERS ====\n";
+        if (users.empty()) output << "Users not found.\n";
+        for (const auto& user : users) {
+            output << "- " << user.Login << " (" << user.Name << ")";
+            if (user.BanStatus == "FOREVER") {
+                output << " [banned forever]";
+            } else if (user.BanStatus == "TEMP") {
+                output << " [banned, time left: "
+                       << FormatBanRemaining(user.BannedUntilEpoch, user.ServerNowEpoch) << "]";
+            }
+            output << "\n";
         }
-        std::cout << "\n";
-    }
+        return output.str();
+    });
 }
 
 void ChatConsole::AdminShowChatsFlow() const {
-    const auto chats = m_service.AdminGetChats();
+    ShowLiveList([this](const bool background) {
+        const auto chats = m_service.AdminGetChats(background);
+        std::ostringstream output;
+        output << "==== CHATS ====\n";
+        if (chats.empty()) output << "Chats not found.\n";
+        for (const auto& chat : chats) {
+            output << "- " << chat.Name << " [" << chat.Type << "]";
+            if (chat.Type == "PRIVATE") {
+                output << " " << DisplayLogin(chat.FirstUserLogin)
+                       << " <-> " << DisplayLogin(chat.SecondUserLogin);
+            }
+            output << "\n";
+        }
+        return output.str();
+    });
+}
 
-    if (chats.empty()) {
-        std::cout << "Chats not found.\n";
+void ChatConsole::ShowLiveList(const std::function<std::string(bool)>& snapshot) const {
+    LiveView view(m_config.RefreshInterval);
+    if (!view.IsInteractive()) {
+        std::cout << snapshot(false);
         return;
     }
-
-    std::cout << "\n==== CHATS ====\n";
-    for (const auto& chat : chats) {
-        std::cout << "- " << chat.Name << " [" << chat.Type << "]";
-        if (chat.Type == "PRIVATE") {
-            std::cout << " "
-                      << DisplayLogin(chat.FirstUserLogin)
-                      << " <-> "
-                      << DisplayLogin(chat.SecondUserLogin);
-        }
-        std::cout << "\n";
+    while (true) {
+        const auto input = view.ReadLine(snapshot, [this] { m_service.NotifyActivity(); },
+            "Enter or /0 - return to menu");
+        if (Trim(input).empty() || Trim(input) == "/0") return;
     }
 }
 
@@ -698,50 +679,47 @@ void ChatConsole::AdminOpenGeneralChatFlow() {
 }
 
 void ChatConsole::AdminChatSession(const std::string& chatName, const bool canSend) {
-    std::cout << "\n==== CHAT: " << chatName << " ====\n";
-    PrintLastMessages(
-        m_service.AdminGetMessages(chatName),
-        core::ADMIN_MESSAGE_NAME,
-        std::numeric_limits<size_t>::max());
+    LiveChatSession(chatName, true, canSend);
+}
 
-    if (canSend) {
-        std::cout << "Enter message (\"/0\" to exit, \"/all\" to print full chat):\n";
-    } else {
-        std::cout << "Read-only chat. Enter \"/0\" to exit or \"/all\" to print full chat:\n";
-    }
-
+void ChatConsole::LiveChatSession(const std::string& chatName, const bool admin, const bool canSend) {
+    const auto currentName = admin ? core::ADMIN_MESSAGE_NAME : m_service.GetCurrentUserName();
+    std::size_t lastCount = admin ? std::numeric_limits<std::size_t>::max() : LAST_MESSAGE_COUNT;
+    std::string status;
+    LiveView view(m_config.RefreshInterval, true);
+    const std::string hint = canSend
+        ? "Enter - send message | /0 - exit chat | /all - show full history"
+        : "Read-only | /0 - exit chat | /all - show full history";
+    const auto snapshot = [&](const bool background) {
+        const auto messages = admin ? m_service.AdminGetMessages(chatName, background)
+                                    : m_service.GetMessages(chatName, background);
+        std::ostringstream output;
+        output << "==== CHAT: " << chatName << " ====\n";
+        PrintLastMessages(messages, currentName, lastCount, output);
+        if (!status.empty()) output << status << "\n";
+        return output.str();
+    };
     while (true) {
-        std::string text = ReadLine();
-
-        if (text == "/0") {
-            break;
-        }
-
-        if (text == "/all") {
-            std::cout << "\n==== FULL CHAT ====\n";
-            const auto allMessages = m_service.AdminGetMessages(chatName);
-            PrintLastMessages(allMessages, core::ADMIN_MESSAGE_NAME, allMessages.size());
+        auto text = view.ReadLine(snapshot, [this] { m_service.NotifyActivity(); }, hint);
+        status.clear();
+        if (Trim(text) == "/0") return;
+        if (Trim(text) == "/all") {
+            lastCount = std::numeric_limits<std::size_t>::max();
             continue;
         }
-
+        if (Trim(text).empty()) continue;
         if (!canSend) {
-            std::cout << "This chat is read-only for ADMIN.\n";
+            status = "This chat is read-only for ADMIN.";
             continue;
         }
-
-        const bool success = chatName == core::GENERAL_CHAT_NAME
-            ? m_service.AdminSendGeneral(std::move(text))
-            : m_service.AdminSendMessageToChat(chatName, std::move(text));
-
+        const bool success = admin
+            ? (chatName == core::GENERAL_CHAT_NAME
+                ? m_service.AdminSendGeneral(std::move(text))
+                : m_service.AdminSendMessageToChat(chatName, std::move(text)))
+            : m_service.SendMessage(chatName, std::move(text));
         if (!success) {
-            std::cout << "Failed to send message.\n";
-            break;
+            status = "Failed to send message.";
         }
-
-        PrintLastMessages(
-            m_service.AdminGetMessages(chatName),
-            core::ADMIN_MESSAGE_NAME,
-            std::numeric_limits<size_t>::max());
     }
 }
 

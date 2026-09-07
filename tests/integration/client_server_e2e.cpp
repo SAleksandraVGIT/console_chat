@@ -18,6 +18,7 @@
 #endif
 
 #include <chrono>
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <mutex>
@@ -97,7 +98,8 @@ uint16_t FindFreePort() {
 
 class TestServer {
 public:
-    TestServer(const uint16_t port, const int expectedClients, fs::path usersFile, fs::path chatsFile)
+    TestServer(const uint16_t port, const int expectedClients, fs::path usersFile, fs::path chatsFile,
+               const std::chrono::seconds timeout = std::chrono::seconds{15})
         : m_usersFile(std::move(usersFile))
         , m_chatsFile(std::move(chatsFile))
         , m_storage(m_usersFile.string(), m_chatsFile.string())
@@ -108,18 +110,21 @@ public:
         }
 
         m_server.BindAndListen(port, expectedClients);
-        m_acceptThread = std::thread([this, expectedClients]() {
+        m_acceptThread = std::thread([this, expectedClients, timeout]() {
             for (int i = 0; i < expectedClients; ++i) {
                 auto client = m_server.Accept();
                 if (!client.IsValid()) {
                     continue;
                 }
 
-                m_sessions.emplace_back([this, client = std::move(client)]() mutable {
+                m_sessions.emplace_back([this, timeout, client = std::move(client)]() mutable {
                     HandleClientSession(
                         std::move(client),
                         m_service,
-                        m_mutex);
+                        m_mutex,
+                        {"operator", "secret", true},
+                        &m_registry,
+                        timeout);
                 });
             }
         });
@@ -139,6 +144,7 @@ public:
 
 private:
     std::mutex m_mutex;
+    console_chat::server::SessionRegistry m_registry;
     TcpSocket m_server;
     std::thread m_acceptThread;
     std::vector<std::thread> m_sessions;
@@ -192,6 +198,96 @@ TEST_F(ClientServerE2E, GeneralChat) {
         ASSERT_EQ(messages.size(), 1u);
         EXPECT_EQ(messages[0].Name, "User_1");
         EXPECT_EQ(messages[0].Text, "Hello over TCP");
+    }
+}
+
+TEST_F(ClientServerE2E, PollObservesNewUsersChatsMessagesAndAdminChanges) {
+    const auto port = FindFreePort();
+    ASSERT_NE(port, 0);
+    TestServer server(port, 3, usersFile, chatsFile);
+    ChatClient alice("127.0.0.1", port), bob("127.0.0.1", port), admin("127.0.0.1", port);
+    ASSERT_TRUE(alice.Register("Alice", "alice", "secret"));
+    ASSERT_TRUE(alice.Authenticate("alice", "secret"));
+    ASSERT_TRUE(admin.AdminLogin("operator", "secret"));
+    EXPECT_EQ(alice.GetAllUserLogins(true), (std::vector<std::string>{"alice"}));
+    ASSERT_TRUE(bob.Register("Bob", "bob", "secret"));
+    ASSERT_TRUE(bob.Authenticate("bob", "secret"));
+    EXPECT_EQ(alice.GetAllUserLogins(true), (std::vector<std::string>{"alice", "bob"}));
+    ASSERT_TRUE(bob.CreatePrivateChat("alice", "together"));
+    const auto chats = alice.GetMyChats(true);
+    EXPECT_NE(std::find(chats.begin(), chats.end(), "together"), chats.end());
+    ASSERT_TRUE(bob.SendMessage("together", "new private message"));
+    const auto messages = alice.GetMessages("together", true);
+    ASSERT_EQ(messages.size(), 1u);
+    EXPECT_EQ(messages[0].Text, "new private message");
+    EXPECT_EQ(admin.AdminGetMessages("together", true).size(), 1u);
+    EXPECT_EQ(admin.AdminGetChats(true).size(), 2u);
+    ASSERT_TRUE(admin.AdminSendGeneral("announcement"));
+    const auto general = alice.GetMessages("GENERAL", true);
+    ASSERT_EQ(general.size(), 1u);
+    EXPECT_EQ(general[0].Name, "ADMIN");
+    ASSERT_TRUE(bob.DeleteAccount("bob"));
+    EXPECT_EQ(alice.GetMyChats(true), (std::vector<std::string>{"GENERAL"}));
+    EXPECT_EQ(admin.AdminGetUsers(true).size(), 1u);
+}
+
+TEST_F(ClientServerE2E, PollDoesNotPreventIdleDisconnect) {
+    const auto port = FindFreePort();
+    ASSERT_NE(port, 0);
+    TestServer server(port, 1, usersFile, chatsFile, std::chrono::seconds{1});
+    ChatClient client("127.0.0.1", port);
+    ASSERT_TRUE(client.Register("Alice", "alice", "secret"));
+    ASSERT_TRUE(client.Authenticate("alice", "secret"));
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{3};
+    bool disconnected = false;
+    while (std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{100});
+        try {
+            client.GetMyChats(true);
+        } catch (const std::runtime_error& error) {
+            EXPECT_STREQ(error.what(), "Disconnected due to inactivity timeout.");
+            disconnected = true;
+            break;
+        }
+    }
+    EXPECT_TRUE(disconnected);
+}
+
+TEST_F(ClientServerE2E, UserActivityExtendsIdleDeadline) {
+    const auto port = FindFreePort();
+    ASSERT_NE(port, 0);
+    TestServer server(port, 1, usersFile, chatsFile, std::chrono::seconds{2});
+    ChatClient client("127.0.0.1", port);
+    ASSERT_TRUE(client.Register("Alice", "alice", "secret"));
+    ASSERT_TRUE(client.Authenticate("alice", "secret"));
+    for (int i = 0; i < 4; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{650});
+        ASSERT_NO_THROW(client.NotifyActivity());
+        EXPECT_EQ(client.GetMyChats(true), (std::vector<std::string>{"GENERAL"}));
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds{2200});
+    try {
+        client.GetMyChats(true);
+        FAIL() << "Idle session remained connected";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(error.what(), "Disconnected due to inactivity timeout.");
+    }
+}
+
+TEST_F(ClientServerE2E, PollReportsAdminDisconnect) {
+    const auto port = FindFreePort();
+    ASSERT_NE(port, 0);
+    TestServer server(port, 2, usersFile, chatsFile);
+    ChatClient client("127.0.0.1", port), admin("127.0.0.1", port);
+    ASSERT_TRUE(client.Register("Alice", "alice", "secret"));
+    ASSERT_TRUE(client.Authenticate("alice", "secret"));
+    ASSERT_TRUE(admin.AdminLogin("operator", "secret"));
+    ASSERT_TRUE(admin.AdminKickUser("alice"));
+    try {
+        client.GetAllUserLogins(true);
+        FAIL() << "Kicked session remained connected";
+    } catch (const std::runtime_error& error) {
+        EXPECT_STREQ(error.what(), "Disconnected by ADMIN.");
     }
 }
 

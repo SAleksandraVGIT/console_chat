@@ -83,6 +83,36 @@ TEST(Protocol, SplitJoin) {
         "OK\tGENERAL\n");
 }
 
+TEST_F(RequestFlow, PollOnlyAllowsAuthenticatedReadOperations) {
+    RequestContext context;
+    const AdminCredentials credentials{"operator", "secret", true};
+    const auto request = [&](const std::vector<std::string>& parts) {
+        return HandleRequest(parts, *service, context, credentials);
+    };
+    EXPECT_EQ(request({"POLL", "GET_ALL_USERS"})[0], "ERR");
+    EXPECT_EQ(request({"ACTIVITY"})[0], "ERR");
+    ASSERT_TRUE(service->Register("Alice", "alice", "secret"));
+    ASSERT_TRUE(service->Register("Bob", "bob", "secret"));
+    ASSERT_TRUE(service->CreatePrivateChat("alice", "bob", "private"));
+    ASSERT_TRUE(service->SendMessage("alice", "private", "hello"));
+    ASSERT_TRUE(service->Register("Eve", "eve", "secret"));
+    ASSERT_EQ(request({"LOGIN", "eve", "secret"})[0], "OK");
+    EXPECT_EQ(request({"ACTIVITY"})[0], "OK");
+    EXPECT_EQ(request({"POLL", "GET_MESSAGES", "private"}), (std::vector<std::string>{"OK"}));
+    EXPECT_EQ(request({"POLL", "ADMIN_GET_CHATS"})[0], "ERR");
+    EXPECT_EQ(request({"POLL", "SEND_MESSAGE", "GENERAL", "injected"})[0], "ERR");
+    EXPECT_EQ(request({"POLL", "DELETE_ACCOUNT", "eve"})[0], "ERR");
+    EXPECT_EQ(request({"POLL", "POLL", "GET_ALL_USERS"})[0], "ERR");
+    EXPECT_EQ(request({"POLL"})[0], "ERR");
+    EXPECT_EQ(request({"POLL", "GET_MY_CHATS", "extra"})[0], "ERR");
+    EXPECT_EQ(request({"POLL", "GET_ALL_USERS"}), request({"GET_ALL_USERS"}));
+    ASSERT_EQ(request({"ADMIN_LOGIN", "operator", "secret"})[0], "OK");
+    EXPECT_EQ(request({"POLL", "ADMIN_GET_MESSAGES", "private"}),
+              (std::vector<std::string>{"OK", "Alice", "hello"}));
+    EXPECT_EQ(request({"POLL", "ADMIN_GET_CHATS"}), request({"ADMIN_GET_CHATS"}));
+    EXPECT_EQ(request({"POLL", "ADMIN_BAN_USER", "alice", "forever"})[0], "ERR");
+}
+
 TEST_F(RequestFlow, GeneralChat) {
     std::string session;
 
