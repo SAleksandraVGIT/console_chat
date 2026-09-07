@@ -2,6 +2,7 @@
 #include "theme.h"
 #include "widgets/main_window.h"
 #include "widgets/chat_page.h"
+#include "widgets/login_page.h"
 #include "console_chat/client/chat_client.h"
 
 #include <QAction>
@@ -19,6 +20,8 @@
 #include <QPushButton>
 #include <QRandomGenerator>
 #include <QSignalSpy>
+#include <QSpinBox>
+#include <QTabBar>
 #include <QTableWidget>
 #include <QTabWidget>
 #include <QTcpServer>
@@ -159,6 +162,135 @@ private slots:
             }
         }
         m_directory.reset();
+    }
+
+    void loginFormPreservesDefaultsAndRoleRules() {
+        auto defaults = Login("alice");
+        defaults.host = "192.0.2.10";
+        defaults.port = 12345;
+        LoginPage page(defaults);
+        page.show();
+        QCOMPARE(page.findChild<QLineEdit*>("serverHost")->text(), defaults.host);
+        QCOMPARE(page.findChild<QSpinBox*>("serverPort")->value(), defaults.port);
+
+        auto* mode = page.findChild<QTabBar*>("loginMode");
+        auto* role = page.findChild<QComboBox*>("loginRole");
+        auto* name = page.findChild<QLineEdit*>("displayName");
+        auto* password = page.findChild<QLineEdit*>("password");
+        auto* submit = page.findChild<QPushButton*>("signInButton");
+        QCOMPARE(password->echoMode(), QLineEdit::Password);
+        QVERIFY(!name->isVisible());
+
+        mode->setCurrentIndex(1);
+        QVERIFY(name->isVisible());
+        QCOMPARE(submit->text(), QString("Create account"));
+
+        role->setCurrentIndex(1);
+        QCOMPARE(mode->currentIndex(), 0);
+        QVERIFY(!mode->isTabVisible(1));
+        QVERIFY(!name->isVisible());
+        QCOMPARE(submit->text(), QString("Sign in"));
+
+        role->setCurrentIndex(0);
+        mode->setCurrentIndex(1);
+        submit->click();
+        QVERIFY(!page.findChild<QLabel*>("loginError")->text().isEmpty());
+
+        LoginRequest submitted;
+        bool received = false;
+        connect(&page, &LoginPage::submitted, &page, [&](const LoginRequest& request) {
+            submitted = request;
+            received = true;
+        });
+
+        name->setText("Alice");
+        page.findChild<QLineEdit*>("login")->setText("alice");
+        password->setText("test-secret");
+        submit->click();
+        QVERIFY(received);
+        QVERIFY(submitted.registration);
+        QVERIFY(!submitted.admin);
+        QCOMPARE(submitted.name, QString("Alice"));
+        QCOMPARE(submitted.host, defaults.host);
+        QCOMPARE(submitted.port, defaults.port);
+
+        page.SetBusy(true);
+        QVERIFY(!submit->isEnabled());
+        QVERIFY(!mode->isEnabled());
+
+        page.SetBusy(false);
+        QVERIFY(submit->isEnabled());
+
+        page.ClearPassword();
+        QVERIFY(password->text().isEmpty());
+    }
+
+    void banDialogUsesSelectedPeriod_data() {
+        QTest::addColumn<int>("index");
+        QTest::addColumn<int>("days");
+        QTest::addColumn<bool>("accept");
+
+        QTest::newRow("one-day") << 0 << 1 << true;
+        QTest::newRow("ten-days") << 1 << 10 << true;
+        QTest::newRow("month") << 2 << 30 << true;
+        QTest::newRow("year") << 3 << 365 << true;
+        QTest::newRow("forever") << 4 << 0 << true;
+        QTest::newRow("cancel") << 4 << 0 << false;
+    }
+
+    void banDialogUsesSelectedPeriod() {
+        QFETCH(int, index);
+        QFETCH(int, days);
+        QFETCH(bool, accept);
+        QVERIFY(StartServer());
+
+        ChatClient observer("127.0.0.1", m_port, std::chrono::seconds{2});
+        QVERIFY(observer.Register("Alice", "alice", "test-secret"));
+        QVERIFY(observer.AdminLogin("operator", "test-secret"));
+
+        MainWindow window(Login("operator", true), 100);
+        window.show();
+        SignInWindow(window, "operator");
+        QTRY_VERIFY(window.findChild<ChatPage*>()->isVisible());
+
+        window.findChild<QTabWidget*>("workspaceTabs")->setCurrentIndex(1);
+        auto* users = window.findChild<QTableWidget*>("userTable");
+        QTRY_COMPARE(users->rowCount(), 1);
+        users->selectRow(0);
+
+        auto* ban = window.findChild<QPushButton*>("banUserButton");
+        QTRY_VERIFY(ban->isEnabled());
+        bool inspected = false;
+
+        QTimer::singleShot(0, &window, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if (!dialog) {
+                return;
+            }
+
+            auto* periods = dialog->findChild<QComboBox*>("banPeriod");
+            auto* login = dialog->findChild<QLabel*>("userLogin");
+            auto* buttons = dialog->findChild<QDialogButtonBox*>();
+            if (periods && login && buttons && periods->count() == 5 && login->text() == "alice") {
+                inspected = true;
+                periods->setCurrentIndex(index);
+                buttons->button(accept ? QDialogButtonBox::Ok : QDialogButtonBox::Cancel)->click();
+            } else {
+                dialog->reject();
+            }
+        });
+
+        ban->click();
+        QVERIFY(inspected);
+        const QString expected = !accept ? "NONE" : (index == 4 ? "FOREVER" : "TEMP");
+        QTRY_COMPARE(QString::fromStdString(observer.AdminGetUsers().front().BanStatus), expected);
+
+        if (accept && days > 0) {
+            const auto user = observer.AdminGetUsers().front();
+            const auto remaining = std::stoll(user.BannedUntilEpoch) - std::stoll(user.ServerNowEpoch);
+            QVERIFY(remaining <= days * 86400);
+            QVERIFY(remaining >= days * 86400 - 5);
+        }
     }
 
     void mixedClientsAndAdminPermissions() {

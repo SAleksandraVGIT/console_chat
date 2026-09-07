@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+  <class>BanUserDialog</class>
+  <widget class="QDialog" name="BanUserDialog">
+    <property name="windowTitle">
+      <string>Ban user</string>
+    </property>
+    <layout class="QFormLayout" name="fieldsLayout">
+      <item row="0" column="0">
+        <widget class="QLabel" name="loginLabel">
+          <property name="text">
+            <string>Login</string>
+          </property>
+        </widget>
+      </item>
+      <item row="0" column="1">
+        <widget class="QLabel" name="userLogin">
+          <property name="text">
+            <string/>
+          </property>
+          <property name="textFormat">
+            <enum>Qt::PlainText</enum>
+          </property>
+          <property name="wordWrap">
+            <bool>true</bool>
+          </property>
+        </widget>
+      </item>
+      <item row="1" column="0">
+        <widget class="QLabel" name="durationLabel">
+          <property name="text">
+            <string>Duration</string>
+          </property>
+          <property name="buddy">
+            <cstring>banPeriod</cstring>
+          </property>
+        </widget>
+      </item>
+      <item row="1" column="1">
+        <widget class="QComboBox" name="banPeriod">
+          <item>
+            <property name="text">
+              <string>1 day</string>
+            </property>
+          </item>
+          <item>
+            <property name="text">
+              <string>10 days</string>
+            </property>
+          </item>
+          <item>
+            <property name="text">
+              <string>1 month</string>
+            </property>
+          </item>
+          <item>
+            <property name="text">
+              <string>1 year</string>
+            </property>
+          </item>
+          <item>
+            <property name="text">
+              <string>Forever</string>
+            </property>
+          </item>
+        </widget>
+      </item>
+      <item row="2" column="0" colspan="2">
+        <widget class="QDialogButtonBox" name="buttonBox">
+          <property name="standardButtons">
+            <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+          </property>
+        </widget>
+      </item>
+    </layout>
+  </widget>
+  <resources/>
+  <connections>
+    <connection>
+      <sender>buttonBox</sender>
+      <signal>accepted()</signal>
+      <receiver>BanUserDialog</receiver>
+      <slot>accept()</slot>
+    </connection>
+    <connection>
+      <sender>buttonBox</sender>
+      <signal>rejected()</signal>
+      <receiver>BanUserDialog</receiver>
+      <slot>reject()</slot>
+    </connection>
+  </connections>
+</ui>

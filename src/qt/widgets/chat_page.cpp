@@ -1,5 +1,6 @@
 #include "chat_page.h"
-#include "ui_helpers.h"
+#include "widget_helpers.h"
+#include "ui_chat_page.h"
 
 #include <QHeaderView>
 #include <QLabel>
@@ -12,121 +13,44 @@
 #include <QTableWidget>
 #include <QTabWidget>
 #include <QTextBrowser>
-#include <QVBoxLayout>
 #include <algorithm>
 
 namespace console_chat::qt {
 
 ChatPage::ChatPage(QWidget* parent) : QWidget(parent) {
-    auto* layout = new QVBoxLayout(this);
-    layout->setContentsMargins(0, 0, 0, 0);
-    m_tabs = new QTabWidget(this);
-    m_tabs->setObjectName("workspaceTabs");
-    layout->addWidget(m_tabs);
+    Ui::ChatPage ui;
+    ui.setupUi(this);
+    m_tabs = ui.workspaceTabs;
+    m_filter = ui.chatFilter;
+    m_chats = ui.chatList;
+    m_create = ui.createChatButton;
+    m_title = ui.chatTitle;
+    m_access = ui.chatAccess;
+    m_participants = ui.chatParticipants;
+    m_messages = ui.messageHistory;
+    m_composer = ui.messageInput;
+    m_send = ui.sendMessageButton;
+    m_users = ui.userTable;
+    m_userChat = ui.userChatButton;
+    m_adminActions = ui.adminActions;
+    m_disconnect = ui.disconnectUserButton;
+    m_ban = ui.banUserButton;
+    m_unban = ui.unbanUserButton;
+    m_cleanup = ui.cleanupAccountsButton;
 
-    auto* split = new QSplitter(this);
-    split->setChildrenCollapsible(false);
-    m_tabs->addTab(split, Icon("mail-message-new", QStyle::SP_FileDialogDetailedView), "Chats");
-
-    auto* sidebar = new QWidget(split);
-    sidebar->setMinimumWidth(180);
-
-    auto* sideLayout = new QVBoxLayout(sidebar);
-    m_filter = new QLineEdit(sidebar);
-    m_filter->setObjectName("chatFilter");
-    m_filter->setPlaceholderText("Search chats");
-    m_filter->setClearButtonEnabled(true);
-    sideLayout->addWidget(m_filter);
-    m_chats = new QListWidget(sidebar);
-    m_chats->setObjectName("chatList");
-    m_chats->setWordWrap(true);
-    sideLayout->addWidget(m_chats, 1);
-    m_create = new QPushButton(Icon("list-add", QStyle::SP_FileDialogNewFolder), "New chat", sidebar);
-    m_create->setObjectName("createChatButton");
-    sideLayout->addWidget(m_create);
-
-    auto* conversation = new QWidget(split);
-    auto* chatLayout = new QVBoxLayout(conversation);
-
-    auto* heading = new QHBoxLayout;
-    m_title = new QLabel("GENERAL", conversation);
-    m_title->setObjectName("chatTitle");
-    m_title->setWordWrap(true);
-    m_title->setTextFormat(Qt::PlainText);
-    m_access = new QLabel(conversation);
-    m_access->setObjectName("chatAccess");
-    heading->addWidget(m_title, 1);
-    heading->addWidget(m_access);
-    chatLayout->addLayout(heading);
-    m_participants = new QLabel(conversation);
-    m_participants->setObjectName("chatParticipants");
-    m_participants->setTextFormat(Qt::PlainText);
-    m_participants->setWordWrap(true);
-    chatLayout->addWidget(m_participants);
-    m_messages = new QTextBrowser(conversation);
-    m_messages->setObjectName("messageHistory");
-    m_messages->setOpenLinks(false);
-    m_messages->setOpenExternalLinks(false);
-    chatLayout->addWidget(m_messages, 1);
-
-    auto* input = new QHBoxLayout;
-    m_composer = new QLineEdit(conversation);
-    m_composer->setObjectName("messageInput");
-    m_composer->setPlaceholderText("Message");
-    m_send = new QPushButton(Icon("mail-send", QStyle::SP_ArrowForward), "Send", conversation);
-    m_send->setObjectName("sendMessageButton");
-    m_send->setProperty("primary", true);
-    input->addWidget(m_composer, 1);
-    input->addWidget(m_send);
-    chatLayout->addLayout(input);
-    split->addWidget(sidebar);
-    split->addWidget(conversation);
-    split->setStretchFactor(0, 0);
-    split->setStretchFactor(1, 1);
-    split->setSizes({240, 720});
-
-    auto* directory = new QWidget(this);
-
-    auto* userLayout = new QVBoxLayout(directory);
-    m_users = new QTableWidget(directory);
-    m_users->setObjectName("userTable");
-    m_users->setColumnCount(3);
-    m_users->setHorizontalHeaderLabels({"Login", "Display name", "Account status"});
+    ui.chatSplitter->setStretchFactor(0, 0);
+    ui.chatSplitter->setStretchFactor(1, 1);
+    ui.chatSplitter->setSizes({240, 720});
+    m_tabs->setTabIcon(0, Icon("mail-message-new", QStyle::SP_FileDialogDetailedView));
+    m_tabs->setTabIcon(1, Icon("system-users", QStyle::SP_DirHomeIcon));
     m_users->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
-    m_users->verticalHeader()->hide();
-    m_users->setSelectionBehavior(QAbstractItemView::SelectRows);
-    m_users->setSelectionMode(QAbstractItemView::SingleSelection);
-    m_users->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    m_users->setAlternatingRowColors(true);
-    userLayout->addWidget(m_users, 1);
-    m_userChat = new QPushButton(Icon("mail-message-new", QStyle::SP_FileDialogNewFolder),
-                               "Create chat with selected user", directory);
-    m_userChat->setObjectName("userChatButton");
-    userLayout->addWidget(m_userChat, 0, Qt::AlignLeft);
-    m_adminActions = new QWidget(directory);
-
-    auto* actions = new QHBoxLayout(m_adminActions);
-    actions->setContentsMargins(0, 0, 0, 0);
-    m_disconnect = new QPushButton("Disconnect", m_adminActions);
-    m_disconnect->setObjectName("disconnectUserButton");
+    m_create->setIcon(Icon("list-add", QStyle::SP_FileDialogNewFolder));
+    m_send->setIcon(Icon("mail-send", QStyle::SP_ArrowForward));
+    m_userChat->setIcon(Icon("mail-message-new", QStyle::SP_FileDialogNewFolder));
     m_disconnect->setIcon(Icon("network-disconnect", QStyle::SP_DialogCloseButton));
-    m_ban = new QPushButton("Ban", m_adminActions);
-    m_ban->setObjectName("banUserButton");
     m_ban->setIcon(Icon("user-lock", QStyle::SP_MessageBoxWarning));
-    m_unban = new QPushButton("Unban", m_adminActions);
-    m_unban->setObjectName("unbanUserButton");
     m_unban->setIcon(Icon("user-unlock", QStyle::SP_DialogApplyButton));
-    m_cleanup = new QPushButton("Delete permanently banned accounts", m_adminActions);
-    m_cleanup->setObjectName("cleanupAccountsButton");
     m_cleanup->setIcon(Icon("edit-delete", QStyle::SP_TrashIcon));
-    actions->addWidget(m_disconnect);
-    actions->addWidget(m_ban);
-    actions->addWidget(m_unban);
-    actions->addStretch();
-    actions->addWidget(m_cleanup);
-    userLayout->addWidget(m_adminActions);
-
-    m_tabs->addTab(directory, Icon("system-users", QStyle::SP_DirHomeIcon), "Users");
 
     connect(m_filter, &QLineEdit::textChanged, this, &ChatPage::FilterChats);
 

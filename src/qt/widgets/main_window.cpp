@@ -1,14 +1,17 @@
 #include "main_window.h"
 #include "chat_page.h"
 #include "login_page.h"
-#include "ui_helpers.h"
+
+#include "widget_helpers.h"
+#include "ui_main_window.h"
+#include "ui_create_chat_dialog.h"
+#include "ui_ban_user_dialog.h"
 
 #include <QAction>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QEvent>
-#include <QFormLayout>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -17,43 +20,34 @@
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QToolBar>
-#include <QVBoxLayout>
 
 namespace console_chat::qt {
 
 MainWindow::MainWindow(const LoginRequest& defaults, const int refreshIntervalMs, QWidget* parent)
     : QMainWindow(parent), m_controller(refreshIntervalMs) {
-    setWindowTitle("Console Chat");
+    Ui::MainWindow ui;
+    ui.setupUi(this);
     setWindowIcon(Icon("mail-message-new", QStyle::SP_ComputerIcon));
-    resize(1040, 720);
-    setMinimumSize(760, 520);
-
-    auto* toolbar = addToolBar("Session");
-    toolbar->setMovable(false);
-    toolbar->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+    m_refresh = ui.refreshAction;
+    m_deleteAccount = ui.deleteAccountAction;
+    m_logout = ui.logoutAction;
+    m_pages = ui.pages;
+    auto* toolbar = ui.sessionToolbar;
     m_identity = new QLabel("Console Chat", toolbar);
     m_identity->setTextFormat(Qt::PlainText);
     m_identity->setWordWrap(true);
     m_identity->setMinimumWidth(100);
     m_identity->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
-    toolbar->addWidget(m_identity);
-    m_refresh = toolbar->addAction(Icon("view-refresh", QStyle::SP_BrowserReload), "Refresh");
-    m_refresh->setObjectName("refreshAction");
-    m_refresh->setToolTip("Refresh chats and users");
+    toolbar->insertWidget(m_refresh, m_identity);
+    m_refresh->setIcon(Icon("view-refresh", QStyle::SP_BrowserReload));
+    m_deleteAccount->setIcon(Icon("edit-delete", QStyle::SP_TrashIcon));
+    m_logout->setIcon(Icon("system-log-out", QStyle::SP_DialogCloseButton));
 
-    m_deleteAccount = toolbar->addAction(Icon("edit-delete", QStyle::SP_TrashIcon), "Delete account");
-    m_deleteAccount->setObjectName("deleteAccountAction");
-
-    m_logout = toolbar->addAction(Icon("system-log-out", QStyle::SP_DialogCloseButton), "Log out");
-    m_logout->setObjectName("logoutAction");
-
-    m_pages = new QStackedWidget(this);
     m_login = new LoginPage(defaults, m_pages);
     m_chat = new ChatPage(m_pages);
     m_pages->addWidget(m_login);
     m_pages->addWidget(m_chat);
-    setCentralWidget(m_pages);
 
     m_status = new QLabel("Disconnected", this);
     m_status->setObjectName("connectionStatus");
@@ -185,13 +179,11 @@ void MainWindow::SetSnapshot(const SessionSnapshot& state) {
 
 void MainWindow::CreateChat(const QString& recipient) {
     QDialog dialog(this);
-    dialog.setWindowTitle("New private chat");
-    dialog.setMinimumWidth(380);
-
-    auto* layout = new QVBoxLayout(&dialog);
-    auto* fields = new QFormLayout;
-    auto* users = new QComboBox(&dialog);
-    users->setObjectName("newChatRecipient");
+    Ui::CreateChatDialog ui;
+    ui.setupUi(&dialog);
+    auto* users = ui.newChatRecipient;
+    auto* name = ui.newChatName;
+    auto* buttons = ui.buttonBox;
 
     for (const auto& user : m_controller.State().users) {
         users->addItem(user.login + (user.login == m_controller.State().login ? " (You)" : ""), user.login);
@@ -201,13 +193,6 @@ void MainWindow::CreateChat(const QString& recipient) {
         users->setCurrentIndex(users->findData(recipient));
     }
 
-    auto* name = new QLineEdit(&dialog);
-    name->setObjectName("newChatName");
-    fields->addRow("Participant", users);
-    fields->addRow("Chat name", name);
-    layout->addLayout(fields);
-
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     buttons->button(QDialogButtonBox::Ok)->setText("Create chat");
     const auto validate = [=] {
         buttons->button(QDialogButtonBox::Ok)->setEnabled(users->currentIndex() >= 0 && ValidField(name->text()));
@@ -218,11 +203,6 @@ void MainWindow::CreateChat(const QString& recipient) {
     connect(users, &QComboBox::currentIndexChanged, &dialog, validate);
     validate();
 
-    connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-
-    connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-    layout->addWidget(buttons);
     if (dialog.exec() == QDialog::Accepted) {
         m_controller.CreateChat(users->currentData().toString(), name->text().trimmed());
     }
@@ -236,28 +216,16 @@ void MainWindow::Moderate(const UserAction action, const QString& login) {
     QString period;
     if (action == UserAction::Ban) {
         QDialog dialog(this);
-        dialog.setWindowTitle("Ban user");
-
-        auto* layout = new QFormLayout(&dialog);
-        auto* user = new QLabel(login, &dialog);
-        user->setTextFormat(Qt::PlainText);
-        user->setWordWrap(true);
-        layout->addRow("Login", user);
-
-        auto* periods = new QComboBox(&dialog);
-        periods->setObjectName("banPeriod");
-        periods->addItem("1 day", "1d");
-        periods->addItem("10 days", "10d");
-        periods->addItem("1 month", "1m");
-        periods->addItem("1 year", "1y");
-        periods->addItem("Forever", "forever");
-        layout->addRow("Duration", periods);
-
-        auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-        buttons->button(QDialogButtonBox::Ok)->setText("Ban user");
-        layout->addRow(buttons);
-        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        Ui::BanUserDialog ui;
+        ui.setupUi(&dialog);
+        ui.userLogin->setText(login);
+        auto* periods = ui.banPeriod;
+        periods->setItemData(0, "1d");
+        periods->setItemData(1, "10d");
+        periods->setItemData(2, "1m");
+        periods->setItemData(3, "1y");
+        periods->setItemData(4, "forever");
+        ui.buttonBox->button(QDialogButtonBox::Ok)->setText("Ban user");
 
         if (dialog.exec() != QDialog::Accepted) {
             return;

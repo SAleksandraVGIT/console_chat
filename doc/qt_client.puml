@@ -18,6 +18,15 @@ package "Worker QThread" {
 }
 component "Console process\nChatConsole + ChatClient" as Console
 component "chat_server\nexisting router and authorization" as Server
+artifact "widgets/*.ui\nQt Designer forms" as Forms
+component "CMake AUTOUIC\nQt 6.4+ uic" as Uic
+artifact "ui_*.h\nbuild directory only" as Generated
+
+Forms --> Uic : build time
+Uic --> Generated
+Generated ..> Window : setupUi
+Generated ..> Login : setupUi
+Generated ..> Chat : setupUi
 
 App --> Window
 Window --> Login

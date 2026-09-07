@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+  <class>CreateChatDialog</class>
+  <widget class="QDialog" name="CreateChatDialog">
+    <property name="windowTitle">
+      <string>New private chat</string>
+    </property>
+    <property name="minimumSize">
+      <size>
+        <width>380</width>
+        <height>0</height>
+      </size>
+    </property>
+    <layout class="QVBoxLayout" name="dialogLayout">
+      <item>
+        <layout class="QFormLayout" name="fieldsLayout">
+          <item row="0" column="0">
+            <widget class="QLabel" name="recipientLabel">
+              <property name="text">
+                <string>Participant</string>
+              </property>
+              <property name="buddy">
+                <cstring>newChatRecipient</cstring>
+              </property>
+            </widget>
+          </item>
+          <item row="0" column="1">
+            <widget class="QComboBox" name="newChatRecipient"/>
+          </item>
+          <item row="1" column="0">
+            <widget class="QLabel" name="chatNameLabel">
+              <property name="text">
+                <string>Chat name</string>
+              </property>
+              <property name="buddy">
+                <cstring>newChatName</cstring>
+              </property>
+            </widget>
+          </item>
+          <item row="1" column="1">
+            <widget class="QLineEdit" name="newChatName"/>
+          </item>
+        </layout>
+      </item>
+      <item>
+        <widget class="QDialogButtonBox" name="buttonBox">
+          <property name="standardButtons">
+            <set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set>
+          </property>
+        </widget>
+      </item>
+    </layout>
+  </widget>
+  <tabstops>
+    <tabstop>newChatRecipient</tabstop>
+    <tabstop>newChatName</tabstop>
+  </tabstops>
+  <resources/>
+  <connections>
+    <connection>
+      <sender>buttonBox</sender>
+      <signal>accepted()</signal>
+      <receiver>CreateChatDialog</receiver>
+      <slot>accept()</slot>
+    </connection>
+    <connection>
+      <sender>buttonBox</sender>
+      <signal>rejected()</signal>
+      <receiver>CreateChatDialog</receiver>
+      <slot>reject()</slot>
+    </connection>
+  </connections>
+</ui>
