@@ -5,7 +5,9 @@
 #include <ws2tcpip.h>
 #else
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -52,13 +54,13 @@ bool WasLastNativeReceiveTimeout() {
     return error == WSAETIMEDOUT || error == WSAEWOULDBLOCK;
 }
 
-bool SetNativeReceiveTimeout(const NativeSocket fd, const std::chrono::seconds timeout) {
+bool SetNativeTimeout(const NativeSocket fd, const int option, const std::chrono::seconds timeout) {
     const auto milliseconds =
         static_cast<DWORD>(std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count());
     return setsockopt(
         fd,
         SOL_SOCKET,
-        SO_RCVTIMEO,
+        option,
         reinterpret_cast<const char*>(&milliseconds),
         sizeof(milliseconds)) == 0;
 }
@@ -86,14 +88,14 @@ bool WasLastNativeReceiveTimeout() {
     return errno == EAGAIN || errno == EWOULDBLOCK;
 }
 
-bool SetNativeReceiveTimeout(const NativeSocket fd, const std::chrono::seconds timeout) {
+bool SetNativeTimeout(const NativeSocket fd, const int option, const std::chrono::seconds timeout) {
     timeval value{};
     value.tv_sec = timeout.count();
     value.tv_usec = 0;
     return setsockopt(
         fd,
         SOL_SOCKET,
-        SO_RCVTIMEO,
+        option,
         &value,
         sizeof(value)) == 0;
 }
@@ -137,7 +139,7 @@ void TcpSocket::EnsureCreated() {
     m_fd = FromNative(created);
 }
 
-void TcpSocket::Connect(const std::string& host, const uint16_t port) {
+void TcpSocket::Connect(const std::string& host, const uint16_t port, const std::chrono::seconds timeout) {
     EnsureCreated();
 
     sockaddr_in addr{};
@@ -147,7 +149,59 @@ void TcpSocket::Connect(const std::string& host, const uint16_t port) {
         throw std::runtime_error("Invalid server address.");
     }
 
-    if (connect(ToNative(m_fd), reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+    const auto fd = ToNative(m_fd);
+    if (timeout > std::chrono::seconds::zero()) {
+#ifdef _WIN32
+        u_long nonblocking = 1;
+        if (ioctlsocket(fd, FIONBIO, &nonblocking) != 0) {
+            throw std::runtime_error("Failed to configure connection.");
+        }
+#else
+        const int flags = fcntl(fd, F_GETFL, 0);
+        if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+            throw std::runtime_error("Failed to configure connection.");
+        }
+#endif
+        const int result = connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+        if (result != 0) {
+#ifdef _WIN32
+            const bool pending = WSAGetLastError() == WSAEWOULDBLOCK;
+#else
+            const bool pending = errno == EINPROGRESS;
+#endif
+            if (!pending) {
+                throw std::runtime_error("Failed to connect to server.");
+            }
+#ifndef _WIN32
+            if (fd >= FD_SETSIZE) {
+                throw std::runtime_error("Connection descriptor exceeds select limit.");
+            }
+#endif
+            fd_set writable, errors;
+            FD_ZERO(&writable);
+            FD_ZERO(&errors);
+            FD_SET(fd, &writable);
+            FD_SET(fd, &errors);
+            timeval wait{static_cast<long>(timeout.count()), 0};
+            const int ready = select(static_cast<int>(fd) + 1, nullptr, &writable, &errors, &wait);
+            int error = 0;
+            SocketLen size = sizeof(error);
+            if (ready <= 0 || getsockopt(fd, SOL_SOCKET, SO_ERROR,
+                reinterpret_cast<char*>(&error), &size) != 0 || error != 0) {
+                throw std::runtime_error("Failed to connect to server (connection refused or timed out).");
+            }
+        }
+#ifdef _WIN32
+        nonblocking = 0;
+        if (ioctlsocket(fd, FIONBIO, &nonblocking) != 0) {
+#else
+        if (fcntl(fd, F_SETFL, flags) != 0) {
+#endif
+            throw std::runtime_error("Failed to configure connection.");
+        }
+        return;
+    }
+    if (connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
         throw std::runtime_error("Failed to connect to server.");
     }
 }
@@ -240,7 +294,11 @@ bool TcpSocket::SetReceiveTimeout(const std::chrono::seconds timeout) {
         return false;
     }
 
-    return SetNativeReceiveTimeout(ToNative(m_fd), timeout);
+    return SetNativeTimeout(ToNative(m_fd), SO_RCVTIMEO, timeout);
+}
+
+bool TcpSocket::SetSendTimeout(const std::chrono::seconds timeout) {
+    return IsValid() && SetNativeTimeout(ToNative(m_fd), SO_SNDTIMEO, timeout);
 }
 
 bool TcpSocket::WasLastReceiveTimedOut() const {

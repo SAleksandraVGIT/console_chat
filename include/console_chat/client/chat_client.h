@@ -26,6 +26,7 @@ struct AdminChatInfo {
 struct CreatePrivateChatResult {
     bool Success = false;
     std::string ExistingChatName;
+    bool NameInUse = false;
 };
 
 struct AuthResult {
@@ -38,7 +39,8 @@ struct AuthResult {
 
 class ChatClient {
 public:
-    ChatClient(const std::string& host, const int port);
+    ChatClient(const std::string& host, const int port,
+               std::chrono::seconds timeout = std::chrono::seconds::zero());
     ~ChatClient();
 
     bool Register(std::string&& name, std::string&& login, std::string&& password);

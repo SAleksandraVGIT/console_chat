@@ -1,6 +1,7 @@
 # Тесты
 
 Тесты написаны на GoogleTest и подключены через CTest.
+При `BUILD_QT_CLIENT=ON` дополнительно собирается `chat_qt_tests` на Qt Test.
 
 ## Структура
 
@@ -33,6 +34,22 @@ ctest --test-dir build -L unit --output-on-failure
 ctest --test-dir build -L integration --output-on-failure
 ctest --test-dir build -L e2e --output-on-failure
 ```
+
+## Qt-Тесты
+
+```bash
+cmake -S . -B build -DBUILD_QT_CLIENT=ON -DBUILD_TESTING=ON
+cmake --build build -j
+ctest --test-dir build -L qt --output-on-failure
+```
+
+Цель `QtClient` использует offscreen-платформу и отдельный процесс `chat_server` с
+временными файлами. Проверяются совместная переписка Qt/консоли, права ADMIN на чужие
+и свои чаты, создание чата с собой и обработка дублей, временный/вечный бан и разбан,
+отдельное удаление забаненных, подтверждение удаления своего аккаунта, таймаут при
+опросе, уведомления активности и работа GUI при зависшем сервере. Проверки виджетов
+сохраняют снимки в `build/qt-screenshots/`, проверяют сохранение черновика и
+доступность действий в зависимости от роли.
 
 ## Unit-Тесты
 

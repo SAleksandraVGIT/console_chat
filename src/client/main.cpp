@@ -1,6 +1,9 @@
 #include "console_chat/client/chat_console.h"
 #include "console_chat/client/chat_client.h"
 #include "console_chat/client/client_config.h"
+#ifdef CONSOLE_CHAT_WITH_QT
+#include "app.h"
+#endif
 
 #include <clocale>
 #include <iostream>
@@ -22,6 +25,7 @@ int main(int argc, char* argv[]) {
         int port = DEFAULT_PORT;
         bool adminMode = false;
         std::string configPath = "config/client.conf";
+        std::string ui = "console";
 
         for (int i = 1; i < argc; ++i) {
             const std::string arg = argv[i];
@@ -37,13 +41,17 @@ int main(int argc, char* argv[]) {
                 adminMode = true;
                 continue;
             }
+            if (arg == "--ui" && i + 1 < argc) {
+                ui = argv[++i];
+                continue;
+            }
             if (arg == "--client-config" && i + 1 < argc) {
                 configPath = argv[++i];
                 continue;
             }
             if (arg == "--help") {
                 std::cout << "Usage: console_chat [--host <ip>] [--port <number>] [--admin] "
-                             "[--client-config <path>]\n";
+                             "[--client-config <path>] [--ui console|qt]\n";
                 return 0;
             }
 
@@ -52,6 +60,16 @@ int main(int argc, char* argv[]) {
 
         if (port < MIN_PORT || port > MAX_PORT) {
             throw std::runtime_error("Port must be in range 1024..49151.");
+        }
+        if (ui == "qt") {
+#ifdef CONSOLE_CHAT_WITH_QT
+            return console_chat::qt::RunApplication(argc, argv);
+#else
+            throw std::runtime_error("Qt UI is not built. Configure with -DBUILD_QT_CLIENT=ON.");
+#endif
+        }
+        if (ui != "console") {
+            throw std::runtime_error("UI must be console or qt.");
         }
 
         std::setlocale(LC_CTYPE, "");

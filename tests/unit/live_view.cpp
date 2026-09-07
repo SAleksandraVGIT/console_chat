@@ -26,7 +26,9 @@ public:
     explicit TerminalChild(const std::function<void()>& run) {
         master = posix_openpt(O_RDWR | O_NOCTTY);
         if (master < 0 || grantpt(master) != 0 || unlockpt(master) != 0) {
-            if (master >= 0) close(master);
+            if (master >= 0) {
+                close(master);
+            }
             throw std::runtime_error("Failed to create test terminal");
         }
 
@@ -43,14 +45,21 @@ public:
             close(master);
             setsid();
             const int slave = open(slaveName.c_str(), O_RDWR);
-            if (slave < 0) _exit(2);
+            if (slave < 0) {
+                _exit(2);
+            }
+
             ioctl(slave, TIOCSCTTY, 0);
             winsize size{12, 32, 0, 0};
             ioctl(slave, TIOCSWINSZ, &size);
             dup2(slave, STDIN_FILENO);
             dup2(slave, STDOUT_FILENO);
             dup2(slave, STDERR_FILENO);
-            if (slave > STDERR_FILENO) close(slave);
+
+            if (slave > STDERR_FILENO) {
+                close(slave);
+            }
+
             setenv("TERM", "xterm", 1);
             std::setlocale(LC_CTYPE, "C.UTF-8");
             termios original{};
@@ -84,10 +93,15 @@ public:
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{3};
         while (output.find(text) == std::string::npos && std::chrono::steady_clock::now() < deadline) {
             pollfd fd{master, POLLIN, 0};
-            if (poll(&fd, 1, 50) <= 0) continue;
+            if (poll(&fd, 1, 50) <= 0) {
+                continue;
+            }
+
             char buffer[4096];
             const auto count = read(master, buffer, sizeof(buffer));
-            if (count <= 0) break;
+            if (count <= 0) {
+                break;
+            }
             output.append(buffer, count);
         }
         return output.find(text) != std::string::npos;
@@ -104,10 +118,15 @@ TEST(LiveView, RefreshPreservesDraftCursorUtf8AndTerminalMode) {
         int polls = 0;
         {
             console_chat::client::LiveView view(std::chrono::milliseconds{150});
-            result = view.ReadLine([&](bool background) {
-                if (background) ++polls;
-                return polls >= 2 ? "CHAT\nUPDATED\n" : "CHAT\nINITIAL\n";
-            }, [] {});
+            result = view.ReadLine(
+                [&](bool background) {
+                    if (background) {
+                        ++polls;
+                    }
+                    return polls >= 2 ? "CHAT\nUPDATED\n" : "CHAT\nINITIAL\n";
+                },
+                [] {
+                });
         }
         std::cout << "RESULT=" << result << "\nPOLLED=" << (polls >= 2) << "\n";
     });
@@ -129,10 +148,16 @@ TEST(LiveView, BackgroundFailureRestoresTerminalWithoutReportingActivity) {
         int polls = 0;
         try {
             console_chat::client::LiveView view(std::chrono::milliseconds{100});
-            view.ReadLine([&](bool background) -> std::string {
-                if (background && ++polls == 3) throw std::runtime_error("Disconnected by ADMIN.");
-                return "USERS\nINITIAL\n";
-            }, [&] { ++activities; });
+            view.ReadLine(
+                [&](bool background) -> std::string {
+                    if (background && ++polls == 3) {
+                        throw std::runtime_error("Disconnected by ADMIN.");
+                    }
+                    return "USERS\nINITIAL\n";
+                },
+                [&] {
+                    ++activities;
+                });
         } catch (...) {
             std::cout << "ACTIVITIES=" << activities << "\n";
             throw;
@@ -142,6 +167,7 @@ TEST(LiveView, BackgroundFailureRestoresTerminalWithoutReportingActivity) {
     EXPECT_TRUE(terminal.WaitFor("ERROR=Disconnected by ADMIN."));
     EXPECT_TRUE(terminal.WaitFor("ACTIVITIES=0"));
     EXPECT_TRUE(terminal.WaitFor("RESTORED=1"));
+
     const auto first = terminal.output.find("INITIAL");
     ASSERT_NE(first, std::string::npos);
     EXPECT_EQ(terminal.output.find("INITIAL", first + 1), std::string::npos);
@@ -155,7 +181,8 @@ TEST(LiveView, ResizeAndScrollingPreserveLongDraft) {
             console_chat::client::LiveView view(std::chrono::milliseconds{100}, true);
             result = view.ReadLine([](bool) {
                 return "CHAT\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n11\n12\nLAST\n";
-            }, [] {}, "/0 - exit | /all - history");
+            }, [] {
+            }, "/0 - exit | /all - history");
         }
         std::cout << "RESULT=" << result << "\n";
     });
@@ -164,10 +191,12 @@ TEST(LiveView, ResizeAndScrollingPreserveLongDraft) {
     ASSERT_TRUE(terminal.WaitFor("\033[11;1H\033[2K/0 - exit | /all - history"));
     terminal.Send(draft);
     ASSERT_TRUE(terminal.WaitFor("> xxxxxxxxx"));
+
     winsize size{6, 16, 0, 0};
     ASSERT_EQ(ioctl(terminal.master, TIOCSWINSZ, &size), 0);
     ASSERT_TRUE(terminal.WaitFor("\033[4;1H\033[2K/0 - exit | /al"));
     ASSERT_TRUE(terminal.WaitFor("\033[5;1H\033[2Kl - history"));
+
     terminal.Send("\033[5~\033[6~\033[H\033[3~Z\033[F\r");
     ASSERT_TRUE(terminal.WaitFor("RESULT=Z" + draft.substr(1))) << terminal.output;
     EXPECT_TRUE(terminal.WaitFor("RESTORED=1"));
@@ -176,7 +205,10 @@ TEST(LiveView, ResizeAndScrollingPreserveLongDraft) {
 TEST(LiveView, CtrlDExitsAndRestoresTerminal) {
     TerminalChild terminal([] {
         console_chat::client::LiveView view(std::chrono::milliseconds{100});
-        view.ReadLine([](bool) { return "INITIAL\n"; }, [] {});
+        view.ReadLine([](bool) {
+            return "INITIAL\n";
+        }, [] {
+        });
     });
 
     ASSERT_TRUE(terminal.WaitFor("INITIAL"));

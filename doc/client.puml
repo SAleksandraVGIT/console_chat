@@ -61,7 +61,7 @@ package "Client application (console_chat)" {
   }
 
   class ChatClient {
-    +ChatClient(host, port)
+    +ChatClient(host, port, timeout = 0)
     +~ChatClient()
     +Register(name, login, password) : bool
     +Authenticate(login, password) : bool
@@ -141,6 +141,7 @@ package "Network" {
     +SendLine(line) : bool
     +RecvLine(line) : bool
     +SetReceiveTimeout(timeout) : bool
+    +SetSendTimeout(timeout) : bool
     +WasLastReceiveTimedOut() : bool
     +Close()
     +IsValid() : bool
@@ -166,6 +167,7 @@ package "Shared model" {
   class CreatePrivateChatResult <<struct>> {
     +Success : bool
     +ExistingChatName : string
+    +NameInUse : bool
   }
 
   class AdminUserInfo <<struct>> {
@@ -234,6 +236,8 @@ note bottom of TcpSocket
   The client keeps one TCP connection
   for the lifetime of ChatClient.
   --admin only selects a different menu.
+  Qt UI uses the same ChatClient API.
+  Qt layers are documented in qt_client.puml.
 end note
 
 @enduml

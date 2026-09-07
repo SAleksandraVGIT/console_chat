@@ -22,7 +22,8 @@ public:
     TcpSocket(TcpSocket&& other) noexcept;
     TcpSocket& operator=(TcpSocket&& other) noexcept;
 
-    void Connect(const std::string& host, const uint16_t port);
+    void Connect(const std::string& host, const uint16_t port,
+                 std::chrono::seconds timeout = std::chrono::seconds::zero());
     void BindAndListen(const uint16_t port, const int backlog);
     TcpSocket Accept() const;
 
@@ -31,6 +32,7 @@ public:
     std::string GetPeerAddress() const;
 
     bool SetReceiveTimeout(std::chrono::seconds timeout);
+    bool SetSendTimeout(std::chrono::seconds timeout);
     bool WasLastReceiveTimedOut() const;
 
     void Close();

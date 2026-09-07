@@ -23,8 +23,17 @@
 namespace console_chat::client {
 namespace {
 
-enum Key { None = -1, EndOfInput = -2, Left = -3, Right = -4, Home = -5,
-           End = -6, Delete = -7, PageUp = -8, PageDown = -9 };
+enum Key {
+    None = -1,
+    EndOfInput = -2,
+    Left = -3,
+    Right = -4,
+    Home = -5,
+    End = -6,
+    Delete = -7,
+    PageUp = -8,
+    PageDown = -9
+};
 
 bool Continuation(const char ch) {
     return (static_cast<unsigned char>(ch) & 0xc0) == 0x80;
@@ -81,15 +90,18 @@ std::vector<std::string> Wrap(const std::string& text, const int width) {
         const auto next = Next(text, i);
         const auto character = text.substr(i, next - i);
         i = next;
+
         if (character == "\n") {
             lines.emplace_back();
             columns = 0;
             continue;
         }
+
         // Server-provided names and messages must not become terminal escape sequences.
         const auto byte = static_cast<unsigned char>(character.front());
         const auto safe = byte < 32 || byte == 127 ? " " : character;
         const int size = Width(safe);
+
         if (columns + size > width) {
             lines.emplace_back();
             columns = 0;
@@ -97,6 +109,7 @@ std::vector<std::string> Wrap(const std::string& text, const int width) {
         lines.back() += safe;
         columns += size;
     }
+
     if (lines.size() > 1 && lines.back().empty()) {
         lines.pop_back();
     }
@@ -126,9 +139,11 @@ struct LiveView::Terminal {
         if (!GetConsoleMode(input, &inputMode) || !GetConsoleMode(output, &outputMode)) {
             return;
         }
+
         if (!SetConsoleMode(output, outputMode | ENABLE_VIRTUAL_TERMINAL_PROCESSING)) {
             return;
         }
+
         if (!SetConsoleMode(input, inputMode & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT |
                                                  ENABLE_PROCESSED_INPUT))) {
             SetConsoleMode(output, outputMode);
@@ -142,11 +157,13 @@ struct LiveView::Terminal {
             (term && std::string_view(term) == "dumb") || tcgetattr(STDIN_FILENO, &saved) != 0) {
             return;
         }
+
         auto mode = saved;
         mode.c_lflag &= ~(ICANON | ECHO | ISIG | IEXTEN);
         mode.c_iflag &= ~(IXON | ICRNL);
         mode.c_cc[VMIN] = 1;
         mode.c_cc[VTIME] = 0;
+
         if (tcsetattr(STDIN_FILENO, TCSANOW, &mode) != 0) {
             return;
         }
@@ -199,59 +216,120 @@ struct LiveView::Terminal {
             pending.erase(0, 1);
             return ch;
         }
+
         const auto result = WaitForSingleObject(input, 50);
-        if (result == WAIT_TIMEOUT) return None;
-        if (result != WAIT_OBJECT_0) return EndOfInput;
+        if (result == WAIT_TIMEOUT) {
+            return None;
+        }
+
+        if (result != WAIT_OBJECT_0) {
+            return EndOfInput;
+        }
+
         INPUT_RECORD record{};
         DWORD count{};
-        if (!ReadConsoleInputW(input, &record, 1, &count)) return EndOfInput;
-        if (record.EventType != KEY_EVENT || !record.Event.KeyEvent.bKeyDown) return None;
+        if (!ReadConsoleInputW(input, &record, 1, &count)) {
+            return EndOfInput;
+        }
+
+        if (record.EventType != KEY_EVENT || !record.Event.KeyEvent.bKeyDown) {
+            return None;
+        }
+
         const auto& key = record.Event.KeyEvent;
         switch (key.wVirtualKeyCode) {
-            case VK_LEFT: return Left;
-            case VK_RIGHT: return Right;
-            case VK_HOME: return Home;
-            case VK_END: return End;
-            case VK_DELETE: return Delete;
-            case VK_PRIOR: return PageUp;
-            case VK_NEXT: return PageDown;
+            case VK_LEFT:
+                return Left;
+            case VK_RIGHT:
+                return Right;
+            case VK_HOME:
+                return Home;
+            case VK_END:
+                return End;
+            case VK_DELETE:
+                return Delete;
+            case VK_PRIOR:
+                return PageUp;
+            case VK_NEXT:
+                return PageDown;
         }
-        if (!key.uChar.UnicodeChar) return None;
+
+        if (!key.uChar.UnicodeChar) {
+            return None;
+        }
+
         char bytes[4]{};
         const int size = WideCharToMultiByte(CP_UTF8, 0, &key.uChar.UnicodeChar, 1,
                                              bytes, sizeof(bytes), nullptr, nullptr);
-        if (size <= 0) return None;
+        if (size <= 0) {
+            return None;
+        }
+
         pending.assign(bytes + 1, size - 1);
         return static_cast<unsigned char>(bytes[0]);
 #else
         pollfd descriptor{STDIN_FILENO, POLLIN, 0};
         const int ready = poll(&descriptor, 1, 50);
         if (ready < 0) {
-            if (errno == EINTR) return None;
+            if (errno == EINTR) {
+                return None;
+            }
             return EndOfInput;
         }
+
         if (ready == 0) {
             escape.clear();
             return None;
         }
+
         unsigned char ch{};
-        if (read(STDIN_FILENO, &ch, 1) != 1) return EndOfInput;
+        if (read(STDIN_FILENO, &ch, 1) != 1) {
+            return EndOfInput;
+        }
+
         if (ch == 27) {
             escape = "\033";
             return None;
         }
+
         if (!escape.empty()) {
             escape += static_cast<char>(ch);
-            if (escape == "\033[" || escape == "\033O") return None;
-            if (ch >= 0x20 && ch <= 0x3f && escape.size() < 32) return None;
+            if (escape == "\033[" || escape == "\033O") {
+                return None;
+            }
+
+            if (ch >= 0x20 && ch <= 0x3f && escape.size() < 32) {
+                return None;
+            }
+
             const auto sequence = std::exchange(escape, {});
-            if (sequence == "\033[D") return Left;
-            if (sequence == "\033[C") return Right;
-            if (sequence == "\033[H" || sequence == "\033OH" || sequence == "\033[1~") return Home;
-            if (sequence == "\033[F" || sequence == "\033OF" || sequence == "\033[4~") return End;
-            if (sequence == "\033[3~") return Delete;
-            if (sequence == "\033[5~") return PageUp;
-            if (sequence == "\033[6~") return PageDown;
+            if (sequence == "\033[D") {
+                return Left;
+            }
+
+            if (sequence == "\033[C") {
+                return Right;
+            }
+
+            if (sequence == "\033[H" || sequence == "\033OH" || sequence == "\033[1~") {
+                return Home;
+            }
+
+            if (sequence == "\033[F" || sequence == "\033OF" || sequence == "\033[4~") {
+                return End;
+            }
+
+            if (sequence == "\033[3~") {
+                return Delete;
+            }
+
+            if (sequence == "\033[5~") {
+                return PageUp;
+            }
+
+            if (sequence == "\033[6~") {
+                return PageDown;
+            }
             return None;
         }
         return ch;
@@ -272,28 +350,38 @@ struct LiveView::Terminal {
         scroll = std::min(scroll, maximum);
         const auto start = followTail ? maximum - scroll : scroll;
         std::string frame = "\033[1;1H\033[2K" + lines.front();
+
         for (std::size_t row = 0; row < height; ++row) {
             frame += "\033[" + std::to_string(row + 2) + ";1H\033[2K";
-            if (start + row < bodySize) frame += lines[start + row + 1];
+            if (start + row < bodySize) {
+                frame += lines[start + row + 1];
+            }
         }
+
         for (std::size_t row = 0; row < hintHeight; ++row) {
             frame += "\033[" + std::to_string(height + row + 2) + ";1H\033[2K" + hints[row];
         }
+
         std::size_t begin = cursor;
         int beforeCursor = 0;
         while (begin > 0) {
             const auto previous = Previous(inputText, begin);
             const int size = Columns(inputText, previous, begin);
-            if (beforeCursor + size > width - 3) break;
+            if (beforeCursor + size > width - 3) {
+                break;
+            }
             beforeCursor += size;
             begin = previous;
         }
+
         auto end = cursor;
         int visibleWidth = beforeCursor;
         while (end < inputText.size()) {
             const auto next = Next(inputText, end);
             const int size = Columns(inputText, end, next);
-            if (visibleWidth + size > width - 2) break;
+            if (visibleWidth + size > width - 2) {
+                break;
+            }
             visibleWidth += size;
             end = next;
         }
@@ -308,7 +396,10 @@ LiveView::LiveView(const std::chrono::milliseconds interval, const bool followTa
 
 LiveView::~LiveView() = default;
 
-bool LiveView::IsInteractive() const { return m_terminal->interactive; }
+bool LiveView::IsInteractive() const
+{
+    return m_terminal->interactive;
+}
 
 std::string LiveView::ReadLine(const std::function<std::string(bool)>& snapshot,
                              const std::function<void()>& activity,
@@ -317,9 +408,14 @@ std::string LiveView::ReadLine(const std::function<std::string(bool)>& snapshot,
     std::string input;
     if (!IsInteractive()) {
         std::cout << content;
-        if (!hint.empty()) std::cout << hint << '\n';
+        if (!hint.empty()) {
+            std::cout << hint << '\n';
+        }
+
         std::cout << "> " << std::flush;
-        if (!std::getline(std::cin, input)) throw std::runtime_error("Input closed.");
+        if (!std::getline(std::cin, input)) {
+            throw std::runtime_error("Input closed.");
+        }
         return input;
     }
 
@@ -328,39 +424,52 @@ std::string LiveView::ReadLine(const std::function<std::string(bool)>& snapshot,
     auto activityAt = Clock::now();
     std::size_t cursor = 0, scroll = 0;
     bool dirty = true, pendingActivity = false;
+
     while (true) {
         if (pendingActivity && Clock::now() >= activityAt) {
             activity();
             pendingActivity = false;
             activityAt = Clock::now() + std::chrono::seconds{1};
         }
+
         if (Clock::now() >= refreshAt) {
             auto updated = snapshot(true);
             dirty = dirty || content != updated;
             content = std::move(updated);
             refreshAt = Clock::now() + m_interval;
         }
+
         dirty = m_terminal->Resize() || dirty;
         if (dirty) {
             m_terminal->Render(content, input, cursor, scroll, m_followTail, hint);
             dirty = false;
         }
+
         const int key = m_terminal->ReadKey();
         if (key == EndOfInput || key == 3 || (key == 4 && input.empty())) {
             throw std::runtime_error("Input closed.");
         }
-        if (key == None) continue;
+
+        if (key == None) {
+            continue;
+        }
+
         pendingActivity = true;
         dirty = true;
         if (key == '\r' || key == '\n') {
             activity();
             return input;
         }
-        if (key == Left) cursor = Previous(input, cursor);
-        else if (key == Right) cursor = Next(input, cursor);
-        else if (key == Home || key == 1) cursor = 0;
-        else if (key == End || key == 5) cursor = input.size();
-        else if (key == 8 || key == 127) {
+
+        if (key == Left) {
+            cursor = Previous(input, cursor);
+        } else if (key == Right) {
+            cursor = Next(input, cursor);
+        } else if (key == Home || key == 1) {
+            cursor = 0;
+        } else if (key == End || key == 5) {
+            cursor = input.size();
+        } else if (key == 8 || key == 127) {
             const auto previous = Previous(input, cursor);
             input.erase(previous, cursor - previous);
             cursor = previous;
@@ -371,8 +480,11 @@ std::string LiveView::ReadLine(const std::function<std::string(bool)>& snapshot,
             cursor = 0;
         } else if (key == PageUp || key == PageDown) {
             const auto page = static_cast<std::size_t>(m_terminal->rows - 1);
-            if ((key == PageUp) == m_followTail) scroll += page;
-            else scroll -= std::min(scroll, page);
+            if ((key == PageUp) == m_followTail) {
+                scroll += page;
+            } else {
+                scroll -= std::min(scroll, page);
+            }
         } else if (key >= 32 && key <= 255) {
             input.insert(cursor++, 1, static_cast<char>(key));
         }

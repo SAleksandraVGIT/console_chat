@@ -39,7 +39,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Отключает нестандартные расширения компилятора, например режим gnu++20.
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Формирует список общих исходников для статической библиотеки chat_core.
+# Формирует список исходников серверной предметной области и хранилищ.
 set(CHAT_CORE_SOURCES
   src/core/base_chat.cpp
   src/core/private_chat.cpp
@@ -48,14 +48,9 @@ set(CHAT_CORE_SOURCES
   src/storage/file_manager.cpp
   src/storage/mysql_queries.h
   src/storage/mysql_manager.cpp
-  src/client/chat_console.cpp
-  src/client/client_config.cpp
-  src/client/live_view.cpp
-  src/network/tcp_socket.cpp
-  src/client/chat_client.cpp
 )
 
-# Создаёт статическую библиотеку с общей логикой клиента, сервера и хранилищ.
+# Серверная предметная область и хранилища не зависят от интерфейсов клиента.
 add_library(chat_core STATIC ${CHAT_CORE_SOURCES})
 
 # Добавляет публичный путь к заголовочным файлам проекта.
@@ -64,18 +59,41 @@ target_include_directories(chat_core PUBLIC ${CMAKE_SOURCE_DIR}/include)
 # Подключает MySQL Client ко всем целям, использующим библиотеку chat_core.
 target_link_libraries(chat_core PUBLIC MySQLClient::MySQLClient)
 
-# Проверяет, выполняется ли сборка под Windows.
+# Общий транспорт и клиентский API не зависят от UI и хранилищ.
+add_library(chat_network STATIC src/network/tcp_socket.cpp)
+target_include_directories(chat_network PUBLIC ${CMAKE_SOURCE_DIR}/include)
+
+add_library(chat_client_core STATIC
+  src/client/chat_client.cpp
+  src/client/client_config.cpp
+)
+target_link_libraries(chat_client_core PUBLIC chat_network)
+
+add_library(chat_console_ui STATIC
+  src/client/chat_console.cpp
+  src/client/live_view.cpp
+)
+target_link_libraries(chat_console_ui PUBLIC chat_client_core)
+
 if (WIN32)
-  # Подключает системную библиотеку Windows Sockets к chat_core.
-  target_link_libraries(chat_core PUBLIC ws2_32)
+  # Подключает системную библиотеку Windows Sockets к транспорту.
+  target_link_libraries(chat_network PUBLIC ws2_32)
 endif()
 
 
 # Создаёт исполняемый файл консольного клиента.
 add_executable(console_chat src/client/main.cpp)
 
-# Подключает общую библиотеку chat_core к клиенту.
-target_link_libraries(console_chat PRIVATE chat_core)
+# Подключает консольное представление и общий клиентский API.
+target_link_libraries(console_chat PRIVATE chat_console_ui)
+
+option(BUILD_QT_CLIENT "Build the optional Qt Widgets client (Qt 6.4+)" OFF)
+if (BUILD_QT_CLIENT)
+  find_package(Qt6 6.4 REQUIRED COMPONENTS Widgets)
+  add_subdirectory(src/qt)
+  target_link_libraries(console_chat PRIVATE chat_qt_ui)
+  target_compile_definitions(console_chat PRIVATE CONSOLE_CHAT_WITH_QT)
+endif()
 
 
 # Создаёт исполняемый файл сервера из серверных исходников.
@@ -91,7 +109,7 @@ add_executable(chat_server
 target_include_directories(chat_server PRIVATE ${CMAKE_SOURCE_DIR}/include)
 
 # Подключает общую библиотеку chat_core к серверу.
-target_link_libraries(chat_server PRIVATE chat_core)
+target_link_libraries(chat_server PRIVATE chat_core chat_network)
 
 # Проверяет, выполняется ли сборка сервера под Windows.
 if (WIN32)

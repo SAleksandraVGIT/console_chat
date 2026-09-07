@@ -62,8 +62,7 @@ bool IsReservedLogin(const std::string& login) {
 }
 
 ChatService::ChatService()
-    : ChatService(ServiceLimits{})
-{}
+    : ChatService(ServiceLimits{}) {}
 
 ChatService::ChatService(ServiceLimits limits)
     : m_limits(std::move(limits))
@@ -74,8 +73,7 @@ ChatService::ChatService(ServiceLimits limits)
 }
 
 ChatService::ChatService(storage::IManager& storageManager)
-    : ChatService(storageManager, ServiceLimits{})
-{}
+    : ChatService(storageManager, ServiceLimits{}) {}
 
 ChatService::ChatService(storage::IManager& storageManager, ServiceLimits limits)
     : ChatService(std::move(limits))
@@ -100,7 +98,9 @@ bool ChatService::Initialize() {
     const bool hasGeneralChat = std::any_of(
         state.Chats.begin(),
         state.Chats.end(),
-        [](const ChatState& chat) { return chat.Name == GENERAL_CHAT_NAME; });
+        [](const ChatState& chat) {
+            return chat.Name == GENERAL_CHAT_NAME;
+        });
 
     if (!ImportState(std::move(state))) {
         return false;
@@ -248,6 +248,11 @@ bool ChatService::GetUserInfo(const std::string& login, UserInfo& info) const {
         user->IsBannedForever(),
         user->IsBannedAt(now)};
     return true;
+}
+
+bool ChatService::ChatNameExists(const std::string& name) const
+{
+    return m_chats.contains(name);
 }
 
 std::vector<std::string> ChatService::GetAllChatNames() const {

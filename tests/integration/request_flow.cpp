@@ -161,6 +161,19 @@ TEST_F(RequestFlow, PrivateChat) {
 
     EXPECT_EQ(Request({"CREATE_PRIVATE", "user_2", "user_1&2"}, user1Session), (std::vector<std::string>{"OK"}));
     EXPECT_EQ(
+        Request({"CREATE_PRIVATE", "user_3", "user_1&2"}, user1Session),
+        (std::vector<std::string>{"ERR", "chat name already in use"}));
+    EXPECT_EQ(
+        Request({"CREATE_PRIVATE", "user_1", "user_1&2"}, user3Session),
+        (std::vector<std::string>{"ERR", "chat name already in use"}));
+    EXPECT_EQ(
+        Request({"CREATE_PRIVATE", "user_3", "GENERAL"}, user1Session),
+        (std::vector<std::string>{"ERR", "chat name already in use"}));
+    std::string anonymousSession;
+    EXPECT_EQ(
+        Request({"CREATE_PRIVATE", "user_3", "user_1&2"}, anonymousSession),
+        (std::vector<std::string>{"ERR", "create private failed"}));
+    EXPECT_EQ(
         Request({"CREATE_PRIVATE", "user_2", "duplicate"}, user1Session),
         (std::vector<std::string>{"ERR", "chat already exists", "user_1&2"}));
     EXPECT_EQ(Request({"CREATE_PRIVATE", "user_1", "user_1_self"}, user1Session), (std::vector<std::string>{"OK"}));

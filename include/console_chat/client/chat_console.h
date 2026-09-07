@@ -12,7 +12,8 @@ namespace console_chat::client {
 class ChatConsole {
 public:
     explicit ChatConsole(ChatClient& service, const ClientConfig& config = {})
-        : m_service(service), m_config(config) {}
+        : m_service(service), m_config(config)
+    {}
 
     int Run();
     int RunAdmin();

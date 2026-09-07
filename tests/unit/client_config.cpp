@@ -29,7 +29,10 @@ TEST_F(ClientConfigTest, MissingFileUsesThreeSeconds) {
 }
 
 TEST_F(ClientConfigTest, LoadsWhitespaceCommentsAndCrLf) {
-    { std::ofstream file(path); file << "# interval\r\n\r\n refresh_interval_ms = 750 \r\n"; }
+    {
+        std::ofstream file(path);
+        file << "# interval\r\n\r\n refresh_interval_ms = 750 \r\n";
+    }
     console_chat::client::ClientConfig config;
     std::string error;
     ASSERT_TRUE(console_chat::client::LoadClientConfig(path.string(), config, error)) << error;
@@ -42,7 +45,10 @@ TEST_F(ClientConfigTest, RejectsInvalidIntervalsAndDuplicateOrUnknownKeys) {
                               "", "100ms", "3.5", "100\nrefresh_interval_ms=200", "100\nunknown=5"})
     {
         SCOPED_TRACE(value);
-        { std::ofstream file(path); file << "refresh_interval_ms=" << value << "\n"; }
+        {
+            std::ofstream file(path);
+            file << "refresh_interval_ms=" << value << "\n";
+        }
         console_chat::client::ClientConfig config;
         std::string error;
         EXPECT_FALSE(console_chat::client::LoadClientConfig(path.string(), config, error));
