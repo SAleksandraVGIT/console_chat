@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+  <class>ChatPage</class>
+  <widget class="QWidget" name="ChatPage">
+    <property name="geometry">
+      <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>1040</width>
+        <height>620</height>
+      </rect>
+    </property>
+    <layout class="QVBoxLayout" name="pageLayout">
+      <property name="leftMargin">
+        <number>0</number>
+      </property>
+      <property name="topMargin">
+        <number>0</number>
+      </property>
+      <property name="rightMargin">
+        <number>0</number>
+      </property>
+      <property name="bottomMargin">
+        <number>0</number>
+      </property>
+      <item>
+        <widget class="QTabWidget" name="workspaceTabs">
+          <property name="currentIndex">
+            <number>0</number>
+          </property>
+          <widget class="QWidget" name="chatsTab">
+            <attribute name="title">
+              <string>Chats</string>
+            </attribute>
+            <layout class="QVBoxLayout" name="chatsTabLayout">
+              <property name="leftMargin">
+                <number>0</number>
+              </property>
+              <property name="topMargin">
+                <number>0</number>
+              </property>
+              <property name="rightMargin">
+                <number>0</number>
+              </property>
+              <property name="bottomMargin">
+                <number>0</number>
+              </property>
+              <item>
+                <widget class="QSplitter" name="chatSplitter">
+                  <property name="orientation">
+                    <enum>Qt::Horizontal</enum>
+                  </property>
+                  <property name="childrenCollapsible">
+                    <bool>false</bool>
+                  </property>
+                  <widget class="QWidget" name="sidebar" native="true">
+                    <property name="minimumSize">
+                      <size>
+                        <width>180</width>
+                        <height>0</height>
+                      </size>
+                    </property>
+                    <layout class="QVBoxLayout" name="sidebarLayout" stretch="0,1,0">
+                      <item>
+                        <widget class="QLineEdit" name="chatFilter">
+                          <property name="placeholderText">
+                            <string>Search chats</string>
+                          </property>
+                          <property name="clearButtonEnabled">
+                            <bool>true</bool>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QListWidget" name="chatList">
+                          <property name="wordWrap">
+                            <bool>true</bool>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QPushButton" name="createChatButton">
+                          <property name="text">
+                            <string>New chat</string>
+                          </property>
+                        </widget>
+                      </item>
+                    </layout>
+                  </widget>
+                  <widget class="QWidget" name="conversation" native="true">
+                    <layout class="QVBoxLayout" name="conversationLayout" stretch="0,0,1,0">
+                      <item>
+                        <layout class="QHBoxLayout" name="headingLayout" stretch="1,0">
+                          <item>
+                            <widget class="QLabel" name="chatTitle">
+                              <property name="text">
+                                <string>GENERAL</string>
+                              </property>
+                              <property name="textFormat">
+                                <enum>Qt::PlainText</enum>
+                              </property>
+                              <property name="wordWrap">
+                                <bool>true</bool>
+                              </property>
+                            </widget>
+                          </item>
+                          <item>
+                            <widget class="QLabel" name="chatAccess">
+                              <property name="text">
+                                <string/>
+                              </property>
+                            </widget>
+                          </item>
+                        </layout>
+                      </item>
+                      <item>
+                        <widget class="QLabel" name="chatParticipants">
+                          <property name="text">
+                            <string/>
+                          </property>
+                          <property name="textFormat">
+                            <enum>Qt::PlainText</enum>
+                          </property>
+                          <property name="wordWrap">
+                            <bool>true</bool>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <widget class="QTextBrowser" name="messageHistory">
+                          <property name="openExternalLinks">
+                            <bool>false</bool>
+                          </property>
+                          <property name="openLinks">
+                            <bool>false</bool>
+                          </property>
+                        </widget>
+                      </item>
+                      <item>
+                        <layout class="QHBoxLayout" name="composerLayout" stretch="1,0">
+                          <item>
+                            <widget class="QLineEdit" name="messageInput">
+                              <property name="placeholderText">
+                                <string>Message</string>
+                              </property>
+                            </widget>
+                          </item>
+                          <item>
+                            <widget class="QPushButton" name="sendMessageButton">
+                              <property name="text">
+                                <string>Send</string>
+                              </property>
+                              <property name="primary" stdset="0">
+                                <bool>true</bool>
+                              </property>
+                            </widget>
+                          </item>
+                        </layout>
+                      </item>
+                    </layout>
+                  </widget>
+                </widget>
+              </item>
+            </layout>
+          </widget>
+          <widget class="QWidget" name="usersTab">
+            <attribute name="title">
+              <string>Users</string>
+            </attribute>
+            <layout class="QVBoxLayout" name="usersLayout" stretch="1,0,0">
+              <item>
+                <widget class="QTableWidget" name="userTable">
+                  <property name="editTriggers">
+                    <set>QAbstractItemView::NoEditTriggers</set>
+                  </property>
+                  <property name="alternatingRowColors">
+                    <bool>true</bool>
+                  </property>
+                  <property name="selectionMode">
+                    <enum>QAbstractItemView::SingleSelection</enum>
+                  </property>
+                  <property name="selectionBehavior">
+                    <enum>QAbstractItemView::SelectRows</enum>
+                  </property>
+                  <attribute name="verticalHeaderVisible">
+                    <bool>false</bool>
+                  </attribute>
+                  <column>
+                    <property name="text">
+                      <string>Login</string>
+                    </property>
+                  </column>
+                  <column>
+                    <property name="text">
+                      <string>Display name</string>
+                    </property>
+                  </column>
+                  <column>
+                    <property name="text">
+                      <string>Account status</string>
+                    </property>
+                  </column>
+                </widget>
+              </item>
+              <item alignment="Qt::AlignLeft">
+                <widget class="QPushButton" name="userChatButton">
+                  <property name="text">
+                    <string>Create chat with selected user</string>
+                  </property>
+                </widget>
+              </item>
+              <item>
+                <widget class="QWidget" name="adminActions" native="true">
+                  <layout class="QHBoxLayout" name="adminActionsLayout">
+                    <property name="leftMargin">
+                      <number>0</number>
+                    </property>
+                    <property name="topMargin">
+                      <number>0</number>
+                    </property>
+                    <property name="rightMargin">
+                      <number>0</number>
+                    </property>
+                    <property name="bottomMargin">
+                      <number>0</number>
+                    </property>
+                    <item>
+                      <widget class="QPushButton" name="disconnectUserButton">
+                        <property name="text">
+                          <string>Disconnect</string>
+                        </property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QPushButton" name="banUserButton">
+                        <property name="text">
+                          <string>Ban</string>
+                        </property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QPushButton" name="unbanUserButton">
+                        <property name="text">
+                          <string>Unban</string>
+                        </property>
+                      </widget>
+                    </item>
+                    <item>
+                      <spacer name="adminActionsSpacer">
+                        <property name="orientation">
+                          <enum>Qt::Horizontal</enum>
+                        </property>
+                        <property name="sizeHint" stdset="0">
+                          <size>
+                            <width>40</width>
+                            <height>20</height>
+                          </size>
+                        </property>
+                      </spacer>
+                    </item>
+                    <item>
+                      <widget class="QPushButton" name="cleanupAccountsButton">
+                        <property name="text">
+                          <string>Delete permanently banned accounts</string>
+                        </property>
+                      </widget>
+                    </item>
+                  </layout>
+                </widget>
+              </item>
+            </layout>
+          </widget>
+        </widget>
+      </item>
+    </layout>
+  </widget>
+  <tabstops>
+    <tabstop>workspaceTabs</tabstop>
+    <tabstop>chatFilter</tabstop>
+    <tabstop>chatList</tabstop>
+    <tabstop>createChatButton</tabstop>
+    <tabstop>messageInput</tabstop>
+    <tabstop>sendMessageButton</tabstop>
+    <tabstop>userTable</tabstop>
+    <tabstop>userChatButton</tabstop>
+    <tabstop>disconnectUserButton</tabstop>
+    <tabstop>banUserButton</tabstop>
+    <tabstop>unbanUserButton</tabstop>
+    <tabstop>cleanupAccountsButton</tabstop>
+  </tabstops>
+  <resources/>
+  <connections/>
+</ui>

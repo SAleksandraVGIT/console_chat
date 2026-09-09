@@ -18,7 +18,8 @@
 
 ## 2. Описание
 
-Сетевой консольный чат на C++20 с архитектурой `server + clients`.
+Сетевой чат на C++20 с архитектурой `server + clients`, консольным интерфейсом
+и дополнительным оконным клиентом на Qt Widgets 6.4+.
 
 Проект поддерживает:
 - регистрацию и авторизацию пользователей;
@@ -211,7 +212,9 @@ refresh_interval_ms=3000
 
 Тесты написаны на GoogleTest и подключены через CTest.
 Если GoogleTest не установлен в системе, CMake скачает его автоматически при конфигурации проекта.
-Приведённые ниже команды собирают приложение вместе с unit-, integration- и e2e-тестами.
+Приведённые ниже команды собирают сервер, консольный и Qt-клиенты вместе с тестами.
+Для них нужен комплект разработки Qt 6.4+ с Widgets, Test и Network.
+Также создаётся `build/compile_commands.json` для IntelliSense в VS Code.
 
 ### Linux (Ubuntu, bash)
 
@@ -219,10 +222,10 @@ refresh_interval_ms=3000
 # Опционально: удалить предыдущую сборку для полной пересборки с нуля
 rm -rf build
 
-# Сгенерировать файлы сборки и включить тесты
-cmake -S . -B build -DBUILD_TESTING=ON
+# Включить Qt, тесты и генерацию настроек IntelliSense
+cmake -S . -B build -DBUILD_TESTING=ON -DBUILD_QT_CLIENT=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-# Собрать сервер, клиент и все тесты
+# Собрать сервер, оба клиента и все тесты
 cmake --build build -j
 
 # Запустить все тесты и показать подробности при ошибке
@@ -235,25 +238,92 @@ ctest --test-dir build --output-on-failure
 # Опционально: удалить предыдущую сборку для полной пересборки с нуля
 Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
 
-# Сгенерировать файлы сборки MinGW и включить тесты
-cmake -S . -B build -G "MinGW Makefiles" -DBUILD_TESTING=ON
+# Включить Qt, тесты и генерацию настроек IntelliSense для MinGW
+cmake -S . -B build -G "MinGW Makefiles" -DBUILD_TESTING=ON -DBUILD_QT_CLIENT=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-# Собрать сервер, клиент и все тесты
+# Собрать сервер, оба клиента и все тесты
 cmake --build build
 
 # Запустить все тесты и показать подробности при ошибке
 ctest --test-dir build --output-on-failure
 ```
 
-Для сборки только сервера и клиента укажите `-DBUILD_TESTING=OFF` и не запускайте `ctest`.
+Для сборки без тестов укажите `-DBUILD_TESTING=OFF` и не запускайте `ctest`.
+Для сборки только сервера и консольного клиента замените `-DBUILD_QT_CLIENT=ON`
+на `-DBUILD_QT_CLIENT=OFF`; тогда Qt и Qt-тесты не требуются.
+
+### Qt Widgets / Qt Creator
+
+Qt-клиент включается отдельно; по умолчанию `BUILD_QT_CLIENT=OFF`, и Qt не требуется.
+Нужен комплект разработки Qt 6.4 или новее с Widgets, а для Qt-тестов также Test и Network.
+Поддерживается Qt 6.4.2. Версия Qt, на которой работает сам Qt Creator,
+не заменяет выбранный комплект сборки (Kit).
+
+```bash
+cmake -S . -B build -DBUILD_QT_CLIENT=ON -DBUILD_TESTING=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+```
+
+В Qt Creator откройте корневой `CMakeLists.txt`, выберите Kit с Qt 6.4+ и C++20,
+в конфигурации CMake включите `BUILD_QT_CLIENT=ON`. Цель запуска окна: `chat_gui`.
+Рабочий каталог запуска задайте корнем проекта, чтобы использовать `config/client.conf`.
+Если CMake не находит отдельную установку Qt, задайте `CMAKE_PREFIX_PATH` на каталог Kit,
+например `/path/to/Qt/6.4.2/gcc_64`.
+
+Подробности слоёв, запуска, прав ADMIN и тестов: [Qt-клиент](doc/qt_client.md).
+
+Разметка доступна для визуального редактирования в Qt Designer. В Qt Creator откройте
+файл из `src/qt/widgets/` двойным щелчком:
+
+- `login_page.ui` — вход и регистрация;
+- `chat_page.ui` — чаты, сообщения, список пользователей и действия ADMIN;
+- `main_window.ui` — главное окно, панель действий и контейнер страниц;
+- `create_chat_dialog.ui` — создание приватного чата;
+- `ban_user_dialog.ui` — выбор срока бана.
+
+CMake автоматически обрабатывает формы через `AUTOUIC`. После редактирования `.ui`
+пересоберите приложение. Обработчики и работа с сервером остаются в C++; файлы
+`ui_*.h` генерируются в каталоге сборки и вручную не редактируются.
+
+### VS Code: заголовки Qt и IntelliSense
+
+В `.vscode/c_cpp_properties.json` обе конфигурации используют
+`"compileCommands": "${workspaceFolder}/build/compile_commands.json"`.
+Этот файл сообщает редактору пути к Qt и параметры компиляции каждого исходника.
+Задача `CMake: configure` в `.vscode/tasks.json` уже включает Qt и генерацию этого файла.
+
+При ручном запуске CMake в терминале настройки `tasks.json` не применяются.
+После удаления `build` обязательно повторяйте конфигурацию с обоими флагами
+`-DBUILD_QT_CLIENT=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON`, как в командах выше.
+Один `-DBUILD_TESTING=ON` не включает ни Qt-клиент, ни генерацию `compile_commands.json`.
+
+Если VS Code всё ещё подчёркивает `QApplication`, `QDialogButtonBox` и другие
+Qt-заголовки, выполните через `Ctrl+Shift+P` команды
+`C/C++: Reset IntelliSense Database` и `Developer: Reload Window`.
 
 Подробная информация о структуре тестов и списке проверок находится в [документации по тестам](tests/README.md).
 
 ## 5. Запуск
 
-Собираются два исполняемых файла:
+Собираются следующие исполняемые файлы:
 - `chat_server` — сервер;
-- `console_chat` — клиент.
+- `console_chat` — консольный клиент; при включённой Qt-сборке поддерживает `--ui qt`;
+- `chat_gui` — оконный клиент (при `BUILD_QT_CLIENT=ON`).
+
+Выбор интерфейса:
+
+```bash
+./build/console_chat --ui console
+./build/console_chat --ui qt
+./build/chat_gui
+./build/chat_gui --admin
+```
+
+Все варианты поддерживают `--host`, `--port`, `--admin`, `--client-config`.
+В Qt-окне адрес, порт и роль также доступны на форме входа. Консольные и Qt-клиенты
+могут работать одновременно с одним сервером, в том числе с разными интерфейсами
+у участников одного чата. Протокол и серверные проверки прав общие.
 
 ### Linux (Ubuntu, bash)
 
@@ -355,6 +425,7 @@ ctest --test-dir build --output-on-failure
 
 - `include/console_chat/core/` — доменные модели и бизнес-логика
 - `include/console_chat/client/` — клиентский API и консольный интерфейс
+- `src/qt/` — Qt-клиент: запуск, контроллер сессии, сетевой worker и виджеты в `widgets/`
 - `include/console_chat/network/` — TCP-сокет обёртка
 - `include/console_chat/storage/` — интерфейс и реализации постоянного хранилища
 - `src/core/` — реализации доменной логики
@@ -393,7 +464,7 @@ MySQL-реализация использует prepared statements и тран�
 - Если хотите запускать одной строкой в PowerShell, используйте `;` вместо `&&`:
 
 ```powershell
-cmake -S . -B build -G "MinGW Makefiles"; cmake --build build; .\build\console_chat.exe
+cmake -S . -B build -G "MinGW Makefiles" -DBUILD_QT_CLIENT=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON; cmake --build build; .\build\console_chat.exe
 ```
 
 - Если меняете генератор CMake (например, `Unix Makefiles` <-> `MinGW Makefiles`) или переносите проект между разными ОС, очищайте `build`, чтобы не использовать несовместимый `CMakeCache.txt`.

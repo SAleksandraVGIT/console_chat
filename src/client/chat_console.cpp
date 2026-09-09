@@ -529,8 +529,13 @@ void ChatConsole::ShowMyChatsFlow() const {
         const auto chats = m_service.GetMyChats(background);
         std::ostringstream output;
         output << "==== MY CHATS ====\n";
-        if (chats.empty()) output << "You have no chats.\n";
-        for (const auto& name : chats) output << "- " << name << "\n";
+        if (chats.empty()) {
+            output << "You have no chats.\n";
+        }
+
+        for (const auto& name : chats) {
+            output << "- " << name << "\n";
+        }
         return output.str();
     });
 }
@@ -541,10 +546,15 @@ void ChatConsole::ShowAllUsersFlow() const {
         const auto users = m_service.GetAllUserLogins(background);
         std::ostringstream output;
         output << "==== ALL USER LOGINS ====\n";
-        if (users.empty()) output << "Users not found.\n";
+        if (users.empty()) {
+            output << "Users not found.\n";
+        }
+
         for (const auto& login : users) {
             output << "- " << login;
-            if (!currentLogin.empty() && login == currentLogin) output << " (You)";
+            if (!currentLogin.empty() && login == currentLogin) {
+                output << " (You)";
+            }
             output << "\n";
         }
         return output.str();
@@ -556,7 +566,10 @@ void ChatConsole::AdminShowUsersFlow() const {
         const auto users = m_service.AdminGetUsers(background);
         std::ostringstream output;
         output << "==== USERS ====\n";
-        if (users.empty()) output << "Users not found.\n";
+        if (users.empty()) {
+            output << "Users not found.\n";
+        }
+
         for (const auto& user : users) {
             output << "- " << user.Login << " (" << user.Name << ")";
             if (user.BanStatus == "FOREVER") {
@@ -576,7 +589,10 @@ void ChatConsole::AdminShowChatsFlow() const {
         const auto chats = m_service.AdminGetChats(background);
         std::ostringstream output;
         output << "==== CHATS ====\n";
-        if (chats.empty()) output << "Chats not found.\n";
+        if (chats.empty()) {
+            output << "Chats not found.\n";
+        }
+
         for (const auto& chat : chats) {
             output << "- " << chat.Name << " [" << chat.Type << "]";
             if (chat.Type == "PRIVATE") {
@@ -595,10 +611,15 @@ void ChatConsole::ShowLiveList(const std::function<std::string(bool)>& snapshot)
         std::cout << snapshot(false);
         return;
     }
+
     while (true) {
-        const auto input = view.ReadLine(snapshot, [this] { m_service.NotifyActivity(); },
+        const auto input = view.ReadLine(snapshot, [this] {
+            m_service.NotifyActivity();
+        },
             "Enter or /0 - return to menu");
-        if (Trim(input).empty() || Trim(input) == "/0") return;
+        if (Trim(input).empty() || Trim(input) == "/0") {
+            return;
+        }
     }
 }
 
@@ -693,25 +714,40 @@ void ChatConsole::LiveChatSession(const std::string& chatName, const bool admin,
     const auto snapshot = [&](const bool background) {
         const auto messages = admin ? m_service.AdminGetMessages(chatName, background)
                                     : m_service.GetMessages(chatName, background);
+
         std::ostringstream output;
         output << "==== CHAT: " << chatName << " ====\n";
         PrintLastMessages(messages, currentName, lastCount, output);
-        if (!status.empty()) output << status << "\n";
+        if (!status.empty()) {
+            output << status << "\n";
+        }
         return output.str();
     };
+
     while (true) {
-        auto text = view.ReadLine(snapshot, [this] { m_service.NotifyActivity(); }, hint);
+        auto text = view.ReadLine(snapshot, [this] {
+            m_service.NotifyActivity();
+        }, hint);
         status.clear();
-        if (Trim(text) == "/0") return;
+
+        if (Trim(text) == "/0") {
+            return;
+        }
+
         if (Trim(text) == "/all") {
             lastCount = std::numeric_limits<std::size_t>::max();
             continue;
         }
-        if (Trim(text).empty()) continue;
+
+        if (Trim(text).empty()) {
+            continue;
+        }
+
         if (!canSend) {
             status = "This chat is read-only for ADMIN.";
             continue;
         }
+
         const bool success = admin
             ? (chatName == core::GENERAL_CHAT_NAME
                 ? m_service.AdminSendGeneral(std::move(text))

@@ -4,8 +4,7 @@
 namespace console_chat::core {
 
 BaseChat::BaseChat(const size_t maxMessages)
-    : m_maxMessages(maxMessages)
-{}
+    : m_maxMessages(maxMessages) {}
 
 bool BaseChat::IsParticipant(const std::string&) const {
     return true;

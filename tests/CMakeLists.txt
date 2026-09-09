@@ -42,6 +42,7 @@ target_include_directories(console_chat_unit_tests
 target_link_libraries(console_chat_unit_tests
   PRIVATE
     chat_core
+    chat_console_ui
     GTest::gtest_main
 )
 
@@ -109,6 +110,7 @@ target_include_directories(console_chat_e2e_tests
 target_link_libraries(console_chat_e2e_tests
   PRIVATE
     chat_core
+    chat_client_core
     GTest::gtest_main
 )
 
@@ -116,3 +118,21 @@ target_link_libraries(console_chat_e2e_tests
 gtest_discover_tests(console_chat_e2e_tests
   PROPERTIES LABELS e2e
 )
+
+if (BUILD_QT_CLIENT)
+  find_package(Qt6 6.4 REQUIRED COMPONENTS Test Network)
+  add_executable(chat_qt_tests qt/client_ui.cpp)
+  set_target_properties(chat_qt_tests PROPERTIES AUTOMOC ON)
+  target_link_libraries(chat_qt_tests PRIVATE chat_qt_ui Qt6::Test Qt6::Network)
+  target_compile_definitions(chat_qt_tests PRIVATE
+    CHAT_SERVER_PATH="$<TARGET_FILE:chat_server>"
+    QT_SCREENSHOTS_DIR="${CMAKE_BINARY_DIR}/qt-screenshots"
+  )
+  add_dependencies(chat_qt_tests chat_server)
+  add_test(NAME QtClient COMMAND chat_qt_tests)
+  set_tests_properties(QtClient PROPERTIES
+    LABELS "qt;integration"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    TIMEOUT 90
+  )
+endif()

@@ -1,0 +1,79 @@
+@startuml console_chat_qt_layers
+title console_chat - optional Qt client
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+package "GUI thread" {
+  [RunApplication] as App
+  [MainWindow] as Window
+  [LoginPage] as Login
+  [ChatPage] as Chat
+  [SessionController] as Controller
+  [QTimer refresh / activity] as Timer
+}
+package "Worker QThread" {
+  [ClientWorker] as Worker
+  [ChatClient] as Client
+  [TcpSocket] as Socket
+}
+component "Console process\nChatConsole + ChatClient" as Console
+component "chat_server\nexisting router and authorization" as Server
+artifact "widgets/*.ui\nQt Designer forms" as Forms
+component "CMake AUTOUIC\nQt 6.4+ uic" as Uic
+artifact "ui_*.h\nbuild directory only" as Generated
+
+Forms --> Uic : build time
+Uic --> Generated
+Generated ..> Window : setupUi
+Generated ..> Login : setupUi
+Generated ..> Chat : setupUi
+
+App --> Window
+Window --> Login
+Window --> Chat
+Login --> Controller : sign in / register
+Chat --> Controller : user commands
+Window --> Controller : confirmed admin / account actions
+Timer --> Controller : POLL / ACTIVITY scheduling
+Controller --> Worker : queued operations
+Worker --> Controller : SessionSnapshot / errors / results
+Controller --> Window : GUI signals
+Window --> Controller : OpenChat after existing-chat info closes
+Worker --> Client : sole owner
+Client --> Socket : sequential request / response
+Socket --> Server : same TCP protocol
+Console --> Server : same TCP protocol
+
+note bottom of Worker
+  No QWidget or SQL access.
+  LOGIN or ADMIN_LOGIN selects role.
+  Server remains the authority for permissions.
+  Connection and I/O timeouts: 5 seconds.
+end note
+@enduml
+
+@startuml console_chat_qt_refresh
+title console_chat - Qt refresh and user input
+actor User
+participant ChatPage
+participant SessionController
+participant "ClientWorker (QThread)" as Worker
+participant ChatClient
+participant Server
+
+loop refresh interval and no pending operation
+  SessionController -> Worker : queue Refresh(background=true)
+  Worker -> ChatClient : read lists and selected messages
+  ChatClient -> Server : POLL read commands
+  Server --> ChatClient : response (idle deadline unchanged)
+  ChatClient --> Worker : typed results
+  Worker --> SessionController : queued SessionSnapshot
+  SessionController --> ChatPage : update data, preserve draft and scroll
+end
+User -> ChatPage : keyboard / mouse / wheel
+ChatPage -> SessionController : record activity
+SessionController -> Worker : queue ACTIVITY
+Worker -> ChatClient : NotifyActivity()
+ChatClient -> Server : ACTIVITY
+Server --> ChatClient : OK (idle deadline extended)
+@enduml

@@ -7,13 +7,17 @@
       "command": "cmake",
       "args": [
         "-S", ".",
-        "-B", "build"
+        "-B", "build",
+        "-DBUILD_QT_CLIENT=ON",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
       ],
       "windows": {
         "args": [
           "-S", ".",
           "-B", "build",
-          "-G", "MinGW Makefiles"
+          "-G", "MinGW Makefiles",
+          "-DBUILD_QT_CLIENT=ON",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
         ]
       },
       "options": {

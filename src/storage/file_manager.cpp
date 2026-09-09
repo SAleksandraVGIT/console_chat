@@ -144,8 +144,8 @@ bool FileManager::ReadState(core::ServiceState& state) const {
         {
             return false;
         }
-        chat.IsPrivate = isPrivate == 1;
 
+        chat.IsPrivate = isPrivate == 1;
         if (chat.IsPrivate &&
             !(chatsIn >> std::quoted(chat.Participants[0])
                        >> std::quoted(chat.Participants[1])))
@@ -225,6 +225,7 @@ bool FileManager::WriteState(const core::ServiceState& state) const {
             }
         }
         chatsOut.flush();
+
         if (!chatsOut) {
             return false;
         }
@@ -241,7 +242,9 @@ bool FileManager::AddUser(const core::UserState& user) {
     const auto duplicate = std::find_if(
         m_state.Users.begin(),
         m_state.Users.end(),
-        [&user](const core::UserState& stored) { return stored.Login == user.Login; });
+        [&user](const core::UserState& stored) {
+            return stored.Login == user.Login;
+        });
 
     if (duplicate != m_state.Users.end()) {
         return false;
@@ -265,7 +268,9 @@ bool FileManager::AddChat(const core::ChatState& chat) {
     const auto duplicate = std::find_if(
         m_state.Chats.begin(),
         m_state.Chats.end(),
-        [&chat](const core::ChatState& stored) { return stored.Name == chat.Name; });
+        [&chat](const core::ChatState& stored) {
+            return stored.Name == chat.Name;
+        });
 
     if (duplicate != m_state.Chats.end()) {
         return false;
@@ -280,7 +285,9 @@ bool FileManager::AddChat(const core::ChatState& chat) {
             return std::any_of(
                 m_state.Users.begin(),
                 m_state.Users.end(),
-                [&login](const core::UserState& user) { return user.Login == login; });
+                [&login](const core::UserState& user) {
+                    return user.Login == login;
+                });
         };
 
         if (!userExists(chat.Participants[0]) ||
@@ -314,11 +321,16 @@ bool FileManager::AddMessage(
     const auto chat = std::find_if(
         updated.Chats.begin(),
         updated.Chats.end(),
-        [&chatName](const core::ChatState& stored) { return stored.Name == chatName; });
+        [&chatName](const core::ChatState& stored) {
+            return stored.Name == chatName;
+        });
+
     const bool userExists = std::any_of(
         updated.Users.begin(),
         updated.Users.end(),
-        [&senderLogin](const core::UserState& user) { return user.Login == senderLogin; });
+        [&senderLogin](const core::UserState& user) {
+            return user.Login == senderLogin;
+        });
 
     if (chat == updated.Chats.end() ||
         !userExists ||
@@ -356,7 +368,9 @@ bool FileManager::AddAdminMessage(
     const auto chat = std::find_if(
         updated.Chats.begin(),
         updated.Chats.end(),
-        [&chatName](const core::ChatState& stored) { return stored.Name == chatName; });
+        [&chatName](const core::ChatState& stored) {
+            return stored.Name == chatName;
+        });
 
     if (chat == updated.Chats.end() ||
         chat->Messages.size() >= maxMessagesPerChat)
@@ -393,7 +407,9 @@ bool FileManager::UpdateUserBan(
     const auto user = std::find_if(
         updated.Users.begin(),
         updated.Users.end(),
-        [&login](const core::UserState& stored) { return stored.Login == login; });
+        [&login](const core::UserState& stored) {
+            return stored.Login == login;
+        });
 
     if (user == updated.Users.end()) {
         return false;

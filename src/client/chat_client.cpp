@@ -26,8 +26,12 @@ std::string Join(const std::vector<std::string>& parts, char delim) {
 
 } // namespace
 
-ChatClient::ChatClient(const std::string& host, const int port) {
-    m_socket.Connect(host, static_cast<uint16_t>(port));
+ChatClient::ChatClient(const std::string& host, const int port, const std::chrono::seconds timeout) {
+    m_socket.Connect(host, static_cast<uint16_t>(port), timeout);
+    if (timeout > std::chrono::seconds::zero() &&
+        (!m_socket.SetReceiveTimeout(timeout) || !m_socket.SetSendTimeout(timeout))) {
+        throw std::runtime_error("Failed to configure connection timeout.");
+    }
 }
 
 ChatClient::~ChatClient() = default;
@@ -153,6 +157,10 @@ CreatePrivateChatResult ChatClient::CreatePrivateChatDetailed(
     std::string&& chatName)
 {
     const auto resp = Request({"CREATE_PRIVATE", recipientLogin, chatName});
+    if (resp.size() >= 2 && resp[0] == "ERR" && resp[1] == "chat name already in use") {
+        return {false, {}, true};
+    }
+
     if (!resp.empty() && resp[0] == "OK") {
         return {true, {}};
     }
@@ -238,6 +246,9 @@ CreatePrivateChatResult ChatClient::AdminCreatePrivateChatDetailed(
     std::string&& chatName)
 {
     const auto resp = Request({"ADMIN_CREATE_PRIVATE", recipientLogin, chatName});
+    if (resp.size() >= 2 && resp[0] == "ERR" && resp[1] == "chat name already in use") {
+        return {false, {}, true};
+    }
     if (!resp.empty() && resp[0] == "OK") {
         return {true, {}};
     }

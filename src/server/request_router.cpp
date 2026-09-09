@@ -172,6 +172,9 @@ std::vector<std::string> HandleRequest(
         }
 
         const bool ok = service.CreatePrivateChat(context.currentLogin, std::string(req[1]), std::string(req[2]));
+        if (!ok && !context.currentLogin.empty() && service.ChatNameExists(req[2])) {
+            return {"ERR", "chat name already in use"};
+        }
         return ok ? std::vector<std::string>{"OK"} : std::vector<std::string>{"ERR", "create private failed"};
     }
 
@@ -243,6 +246,9 @@ std::vector<std::string> HandleRequest(
         }
 
         const bool ok = service.CreateAdminPrivateChat(std::string(req[1]), std::string(req[2]));
+        if (!ok && service.ChatNameExists(req[2])) {
+            return {"ERR", "chat name already in use"};
+        }
         return ok
             ? std::vector<std::string>{"OK"}
             : std::vector<std::string>{"ERR", "create private failed"};

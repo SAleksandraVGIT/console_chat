@@ -63,6 +63,7 @@ public:
     std::vector<UserInfo> GetAllUsersInfo() const;
     bool GetUserInfo(const std::string& login, UserInfo& info) const;
     std::vector<std::string> GetAllChatNames() const;
+    bool ChatNameExists(const std::string& name) const;
     std::vector<ChatInfo> GetAllChatsInfo() const;
     std::vector<ChatInfo> GetPrivateChatsInfoForAdmin() const;
     std::vector<Message> GetMessagesForAdmin(const std::string& chatName) const;

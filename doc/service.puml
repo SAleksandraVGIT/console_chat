@@ -74,6 +74,7 @@ package "Core service" {
     +GetAllUsersInfo() : UserInfos
     +GetUserInfo(login, info) : bool
     +GetAllChatNames() : ChatNames
+    +ChatNameExists(name : string) : bool
     +GetAllChatsInfo() : ChatInfos
     +GetMessagesForAdmin(chatName) : Messages
     +SendAdminMessageToGeneral(text) : bool

@@ -21,6 +21,20 @@ node "Client process: console_chat" as ClientNode {
 
 cloud "TCP/IP\nline protocol on port 7777" as Network
 
+node "Qt client process: chat_gui or console_chat --ui qt" as QtNode {
+  [Qt Widgets] as QtWidgets
+  [SessionController] as QtController
+  [ClientWorker in QThread] as QtWorker
+  [Shared ChatClient API] as QtClient
+}
+User --> QtWidgets
+Admin --> QtWidgets
+QtWidgets --> QtController : UI actions
+QtController --> QtWorker : queued commands
+QtWorker --> QtController : snapshots and results
+QtWorker --> QtClient : sequential calls
+QtClient --> Network : same protocol and permissions
+
 node "Server process: chat_server" as ServerNode {
   [Listen TcpSocket] as ListenSocket
   [Client session thread] as Session
